@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 *.tsbuildinfo
+*.pyc
+__pycache__/
 
 # Generated TypeScript outputs
 vite.config.js
@@ -32,6 +34,7 @@ vite.config.d.ts
 .env.*
 !.env.example
 backend/data/
+backend/*.db
 backend/tests/.tmp/
 .promptfoo/
 .python_packages/
