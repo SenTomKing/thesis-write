@@ -1,0 +1,35 @@
+- description: English rewrite should tighten informal tone without breaking JSON shape
+  promptId: rewrite-en
+  vars:
+    action_type: academic-rewrite
+    section_title: Research Question
+    current_text: This section is kind of broad and the claim is still too loose for a review-ready draft.
+    comment_context: Please tighten the claim before expanding the evidence.
+  assert:
+    - type: javascript
+      value: |
+        try {
+          const parsed = JSON.parse(output);
+          return Boolean(parsed.candidate_text && parsed.summary && Array.isArray(parsed.warnings));
+        } catch (error) {
+          return false;
+        }
+    - type: not-contains
+      value: full paper
+
+- description: English expansion should keep the response section-scoped
+  promptId: rewrite-en
+  vars:
+    action_type: expand
+    section_title: Discussion
+    current_text: The current paragraph reports the result but does not explain why it matters.
+    comment_context: Add one layer of interpretation before the implication statement.
+  assert:
+    - type: javascript
+      value: |
+        try {
+          const parsed = JSON.parse(output);
+          return Boolean(parsed.candidate_text && parsed.summary && Array.isArray(parsed.warnings));
+        } catch (error) {
+          return false;
+        }

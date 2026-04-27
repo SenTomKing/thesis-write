@@ -1,0 +1,207 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class DemoIssue:
+    section_title: str
+    issue_type: str
+    severity: str
+    title: str
+    detail: str
+    suggested_action: str
+
+
+@dataclass(frozen=True)
+class DemoComment:
+    raw_comment: str
+    mapped_section_title: str
+    suggested_action: str
+    status: str
+    confidence: float
+
+
+@dataclass(frozen=True)
+class DemoSection:
+    title: str
+    text: str
+
+
+@dataclass(frozen=True)
+class DemoProject:
+    title: str
+    type: str
+    language: str
+    source_type: str
+    overview: str
+    created_at: str
+    updated_at: str
+    sections: tuple[DemoSection, ...]
+    issues: tuple[DemoIssue, ...]
+    comments: tuple[DemoComment, ...]
+
+
+DEMO_PROJECTS: tuple[DemoProject, ...] = (
+    DemoProject(
+        title="????????????",
+        type="thesis",
+        language="zh",
+        source_type="demo",
+        overview="???????????????????????????????",
+        created_at="2026-04-08T08:30:00.000Z",
+        updated_at="2026-04-10T12:15:00.000Z",
+        sections=(
+            DemoSection(
+                title="????",
+                text=(
+                    "????????????????????????????"
+                    "??????????????????????????????????????????"
+                ),
+            ),
+            DemoSection(
+                title="????",
+                text=(
+                    "???????????????????????????????????????????"
+                    "??????????????????????????????????"
+                ),
+            ),
+            DemoSection(
+                title="????",
+                text=(
+                    "?????????????????????????????????"
+                    "??????????????????????????????????????????"
+                ),
+            ),
+            DemoSection(
+                title="?????",
+                text=(
+                    "????????????????????????????"
+                    "????????????????????????????????????????"
+                ),
+            ),
+            DemoSection(
+                title="??",
+                text=(
+                    "?????????????????????????????????????"
+                    "????????????????????"
+                ),
+            ),
+        ),
+        issues=(
+            DemoIssue(
+                section_title="????",
+                issue_type="structure",
+                severity="high",
+                title="?????????",
+                detail="??????????????????????????????????",
+                suggested_action="????????????????????????",
+            ),
+            DemoIssue(
+                section_title="????",
+                issue_type="evidence",
+                severity="medium",
+                title="????????",
+                detail="??????????????????????????????",
+                suggested_action="?????????????????",
+            ),
+            DemoIssue(
+                section_title="?????",
+                issue_type="logic",
+                severity="high",
+                title="?????",
+                detail="?????????????????????????",
+                suggested_action="????????????????????????",
+            ),
+        ),
+        comments=(
+            DemoComment(
+                raw_comment="????????????????????????????????????",
+                mapped_section_title="????",
+                suggested_action="??????????????????????????",
+                status="pending",
+                confidence=0.93,
+            ),
+            DemoComment(
+                raw_comment="????????????????????????????",
+                mapped_section_title="?????",
+                suggested_action="??????????????????????",
+                status="in-progress",
+                confidence=0.81,
+            ),
+        ),
+    ),
+    DemoProject(
+        title="Reviewer Response Workflow for HCI Manuscripts",
+        type="journal-article",
+        language="en",
+        source_type="demo",
+        overview="English demo used to validate that the same workflow still works for journal revisions.",
+        created_at="2026-04-09T04:20:00.000Z",
+        updated_at="2026-04-10T09:00:00.000Z",
+        sections=(
+            DemoSection(
+                title="Introduction",
+                text=(
+                    "This draft examines how reviewer feedback changes the argumentative structure of interdisciplinary HCI manuscripts. "
+                    "The current opening introduces the topic, but the contribution remains broader than necessary."
+                ),
+            ),
+            DemoSection(
+                title="Methods",
+                text=(
+                    "The methods section currently lists coding steps, but it does not explain why the feedback taxonomy is reliable "
+                    "enough for comparison across manuscript versions."
+                ),
+            ),
+            DemoSection(
+                title="Discussion",
+                text=(
+                    "The discussion reports patterns, but the implications for authoring support tools remain underdeveloped and the "
+                    "transitions between sections feel abrupt."
+                ),
+            ),
+            DemoSection(
+                title="Conclusion",
+                text=(
+                    "The conclusion should answer the original research question more directly and identify the limits of the present dataset."
+                ),
+            ),
+        ),
+        issues=(
+            DemoIssue(
+                section_title="Introduction",
+                issue_type="structure",
+                severity="medium",
+                title="The contribution is still too broad",
+                detail="The opening sets up the theme, but the exact claim is not narrow enough for a journal article.",
+                suggested_action="Reduce the opening to one primary claim before introducing the workflow.",
+            ),
+            DemoIssue(
+                section_title="Methods",
+                issue_type="evidence",
+                severity="high",
+                title="Reliability argument is missing",
+                detail="The coding pipeline is listed, but the validation logic is not clear enough.",
+                suggested_action="Add one paragraph that defends the taxonomy and comparison strategy.",
+            ),
+            DemoIssue(
+                section_title="Discussion",
+                issue_type="transitions",
+                severity="low",
+                title="Transitions feel abrupt",
+                detail="The section jumps from findings to implications without a bridge sentence.",
+                suggested_action="Insert one transition sentence before the implication paragraph.",
+            ),
+        ),
+        comments=(
+            DemoComment(
+                raw_comment="The conclusion still does not answer the original research question directly enough.",
+                mapped_section_title="Conclusion",
+                suggested_action="State the answer sentence before moving into limitations.",
+                status="pending",
+                confidence=0.89,
+            ),
+        ),
+    ),
+)

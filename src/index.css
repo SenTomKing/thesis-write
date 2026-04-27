@@ -1,0 +1,173 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  /* ── Color Palette ── Premium Light Mode ── */
+  --bg-main: #F7F8FC;
+  --bg-surface: #FFFFFF;
+  --bg-surface-hover: #F1F3F9;
+  --bg-elevated: #FFFFFF;
+
+  --text-primary: #0C1222;
+  --text-secondary: #4B5675;
+  --text-tertiary: #8C95AD;
+
+  --border-color: #E4E7F0;
+  --border-subtle: rgba(0, 0, 0, 0.04);
+  --border-focus: #8B5CF6;
+
+  --primary-color: #7C3AED;
+  --primary-hover: #6D28D9;
+  --primary-light: #F3F0FF;
+  --primary-muted: rgba(124, 58, 237, 0.08);
+
+  --success-color: #059669;
+  --success-bg: rgba(5, 150, 105, 0.08);
+  --warning-color: #D97706;
+  --warning-bg: rgba(217, 119, 6, 0.08);
+  --danger-color: #DC2626;
+  --danger-bg: rgba(220, 38, 38, 0.08);
+
+  /* ── Gradients ── */
+  --gradient-primary: linear-gradient(135deg, #7C3AED 0%, #6366F1 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #6D28D9 0%, #4F46E5 100%);
+  --gradient-surface: linear-gradient(180deg, rgba(124, 58, 237, 0.03) 0%, transparent 100%);
+  --gradient-page: radial-gradient(ellipse at top left, rgba(124, 58, 237, 0.04), transparent 50%),
+                   radial-gradient(ellipse at top right, rgba(99, 102, 241, 0.03), transparent 40%);
+
+  /* ── Typography ── */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  /* ── Shadows ── Multi-layer diffuse ── */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.07), 0 2px 6px rgba(0, 0, 0, 0.03);
+  --shadow-xl: 0 20px 48px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --shadow-glow: 0 0 20px rgba(124, 58, 237, 0.15);
+  --shadow-glow-sm: 0 0 12px rgba(124, 58, 237, 0.1);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.02);
+  --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.07), 0 2px 6px rgba(0, 0, 0, 0.03);
+
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-blur: 16px;
+
+  /* ── Transitions ── */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-spring: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Layout ── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+::selection {
+  background: rgba(124, 58, 237, 0.14);
+  color: var(--text-primary);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  line-height: 1.6;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  text-decoration: none;
+  color: var(--primary-color);
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--primary-hover);
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* ── Scrollbar ── Thin & transparent ── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+/* ── Utilities ── */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.document-view {
+  font-family: Georgia, 'Times New Roman', Times, serif;
+  font-size: 1.05rem;
+  line-height: 2;
+  color: #1a1a1a;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 3rem 4rem;
+  background: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.03), 0 20px 40px -10px rgba(0, 0, 0, 0.05);
+  min-height: 600px;
+}
+
+/* ── Animations ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.35s ease-out forwards;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.mr-2 {
+  margin-right: 8px;
+}

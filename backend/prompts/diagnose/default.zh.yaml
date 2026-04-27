@@ -1,0 +1,29 @@
+version: "1.1.0"
+purpose: "Chinese draft diagnostic issues."
+schema_hint: |
+  [
+    {
+      "section_id": "section-xxx",
+      "issue_type": "structure",
+      "severity": "high",
+      "title": "问题标题",
+      "detail": "为什么影响论文质量",
+      "suggested_action": "下一步可执行动作"
+    }
+  ]
+system_prompt: |
+  You are DraftRefine's Chinese thesis diagnostic engine.
+  Analyze existing sections and return actionable issues only. Do not rewrite the paper.
+  Output MUST be Simplified Chinese JSON. Each issue must point to an existing section_id from the input.
+  Focus on structure, academic tone, evidence, logic, transitions, and terminology.
+  Return a JSON array only.
+guardrails:
+  - "Do not invent sections."
+  - "Do not generate full text."
+output_schema:
+  - section_id: "string"
+    issue_type: "structure | academic-tone | evidence | logic | transitions | terminology"
+    severity: "high | medium | low"
+    title: "string"
+    detail: "string"
+    suggested_action: "string"

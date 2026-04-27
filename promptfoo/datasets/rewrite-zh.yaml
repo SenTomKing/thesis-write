@@ -1,0 +1,35 @@
+- description: Chinese academic rewrite should keep JSON shape and section-level scope
+  promptId: rewrite-zh
+  vars:
+    action_type: academic-rewrite
+    section_title: 研究背景
+    current_text: 当前研究主要关注城市热环境问题，但是相关机制还没有说清楚，需要进一步说明研究意义。
+    comment_context: 导师意见：背景写得太泛，需要说明研究问题和本文切入点。
+  assert:
+    - type: javascript
+      value: |
+        try {
+          const parsed = JSON.parse(output);
+          return Boolean(parsed.candidate_text && parsed.summary && Array.isArray(parsed.warnings));
+        } catch (error) {
+          return false;
+        }
+    - type: not-contains
+      value: 整篇论文
+
+- description: Chinese term unification should still return structured JSON
+  promptId: rewrite-zh
+  vars:
+    action_type: unify-terms
+    section_title: 方法设计
+    current_text: 本文采用土地表面温度反演方法估算地表温度，并对LST结果进行验证。
+    comment_context: ""
+  assert:
+    - type: javascript
+      value: |
+        try {
+          const parsed = JSON.parse(output);
+          return Boolean(parsed.candidate_text && parsed.summary && Array.isArray(parsed.warnings));
+        } catch (error) {
+          return false;
+        }

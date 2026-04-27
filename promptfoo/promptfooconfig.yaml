@@ -1,0 +1,82 @@
+description: DraftRefine prompt regression suite
+
+prompts:
+  - id: rewrite-zh
+    raw: |
+      你是 DraftRefine 的中文论文改稿 Agent。
+      只修改当前段落或当前章节，不写整篇论文，不新增用户没有提供的事实、数据、实验或引用。
+
+      动作类型：{{action_type}}
+      章节标题：{{section_title}}
+      当前文本：{{current_text}}
+      导师意见：{{comment_context}}
+
+      返回严格 JSON，字段必须是：
+      {
+        "candidate_text": "string",
+        "summary": "string",
+        "warnings": ["string"]
+      }
+
+  - id: rewrite-en
+    raw: |
+      You are DraftRefine's academic revision assistant.
+      Revise only the current section instead of drafting a full paper.
+      Do not invent citations, data, experiments, or findings.
+
+      Action type: {{action_type}}
+      Section title: {{section_title}}
+      Current text: {{current_text}}
+      Reviewer context: {{comment_context}}
+
+      Return JSON only with this schema:
+      {
+        "candidate_text": "string",
+        "summary": "string",
+        "warnings": ["string"]
+      }
+
+  - id: comment-map
+    raw: |
+      You map reviewer comments to the best matching section in an existing draft.
+      Available sections:
+      {{section_catalog}}
+
+      Comment:
+      {{raw_comment}}
+
+      Return JSON only with this schema:
+      {
+        "mapped_section_id": "string",
+        "confidence": 0.0,
+        "suggested_action": "string"
+      }
+
+providers:
+  - id: openai:chat:${env:DRAFTREFINE_DEEPSEEK_MODEL}
+    label: deepseek
+    config:
+      apiBaseUrl: ${env:DRAFTREFINE_DEEPSEEK_BASE_URL}
+      apiKeyEnvar: DRAFTREFINE_DEEPSEEK_API_KEY
+
+  - id: openai:chat:${env:DRAFTREFINE_QWEN_MODEL}
+    label: qwen
+    config:
+      apiBaseUrl: ${env:DRAFTREFINE_QWEN_BASE_URL}
+      apiKeyEnvar: DRAFTREFINE_QWEN_API_KEY
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        try {
+          const parsed = JSON.parse(output);
+          return typeof parsed === 'object' && parsed !== null;
+        } catch (error) {
+          return false;
+        }
+
+tests:
+  - file://promptfoo/datasets/rewrite-zh.yaml
+  - file://promptfoo/datasets/rewrite-en.yaml
+  - file://promptfoo/datasets/comment-map.yaml

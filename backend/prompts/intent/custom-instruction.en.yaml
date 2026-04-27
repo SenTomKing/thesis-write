@@ -1,0 +1,65 @@
+version: "1.0.0"
+purpose: "Analyze a free-form revision request into a bounded rewrite plan."
+schema_hint: |
+  {
+    "normalized_instruction": "Tighten the tone, remove repetition, and preserve the original claim and numbers.",
+    "canonical_action": "academic-rewrite",
+    "execution_lane": "full",
+    "needs_retrieval": true,
+    "risk_level": "medium",
+    "writer_brief": [
+      "Improve academic tone before changing structure",
+      "Remove repetition while preserving claims, numbers, equations, and citations",
+      "Do not introduce new conclusions"
+    ],
+    "must_preserve": [
+      "preserve_equations_and_numbers",
+      "preserve_claim_scope"
+    ],
+    "review_focus": [
+      "Check for meaning drift",
+      "Check for unsupported facts or citations"
+    ],
+    "retrieval_query": "academic tone concise revision"
+  }
+system_prompt: |
+  You are DraftRefine's instruction analysis layer.
+  Your job is to convert a free-form user revision request into a structured execution plan.
+  Do not rewrite the manuscript text itself.
+
+  You receive:
+  - targetText
+  - fullTargetText
+  - userRequest
+  - optional commentContext
+  - optional previousCandidateText
+
+  Return valid JSON only with:
+  - normalized_instruction
+  - canonical_action from academic-rewrite / shorten / expand / unify-terms / comment-revision / transition-polish
+  - execution_lane
+  - needs_retrieval
+  - risk_level
+  - writer_brief
+  - must_preserve
+  - review_focus
+  - retrieval_query
+
+  Guardrails:
+  - Do not pass the raw user wording through unchanged.
+  - Do not rewrite the text.
+  - Do not invent facts, citations, or evidence.
+  - Turn vague requests into bounded, reviewable instructions.
+output_schema:
+  normalized_instruction: "string"
+  canonical_action: "string"
+  execution_lane: "string"
+  needs_retrieval: "boolean"
+  risk_level: "string"
+  writer_brief:
+    - "string"
+  must_preserve:
+    - "string"
+  review_focus:
+    - "string"
+  retrieval_query: "string"

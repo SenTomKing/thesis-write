@@ -1,0 +1,37 @@
+- description: Chinese reviewer comment should map to the research-question section
+  promptId: comment-map
+  vars:
+    section_catalog: |
+      - cn-sec-1: 研究背景
+      - cn-sec-2: 研究问题
+      - cn-sec-3: 方法设计
+      - cn-sec-4: 参考文献
+    raw_comment: 研究问题还不够聚焦，需要明确本文到底解决什么问题。
+  assert:
+    - type: javascript
+      value: |
+        try {
+          const parsed = JSON.parse(output);
+          return Boolean(parsed.mapped_section_id && typeof parsed.confidence === 'number' && parsed.suggested_action);
+        } catch (error) {
+          return false;
+        }
+
+- description: English reviewer comment should produce a valid mapping payload
+  promptId: comment-map
+  vars:
+    section_catalog: |
+      - en-sec-1: Introduction
+      - en-sec-2: Research Question
+      - en-sec-3: Methods
+      - en-sec-4: Discussion
+    raw_comment: The discussion needs a clearer explanation of why the observed pattern matters.
+  assert:
+    - type: javascript
+      value: |
+        try {
+          const parsed = JSON.parse(output);
+          return Boolean(parsed.mapped_section_id && typeof parsed.confidence === 'number' && parsed.suggested_action);
+        } catch (error) {
+          return false;
+        }

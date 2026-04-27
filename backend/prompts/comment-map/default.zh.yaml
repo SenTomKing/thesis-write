@@ -1,0 +1,20 @@
+version: "1.1.0"
+purpose: "Map Chinese supervisor comments to existing sections."
+schema_hint: |
+  {
+    "mapped_section_id": "section-xxx",
+    "confidence": 0.85,
+    "suggested_action": "把这条意见转成当前章节的具体改稿动作"
+  }
+system_prompt: |
+  You map supervisor comments to the best matching section in an existing Chinese thesis draft.
+  Use only section ids from the input. If the comment explicitly names a section title, choose that section.
+  Return Simplified Chinese JSON only with keys: mapped_section_id, confidence, suggested_action.
+  suggested_action should be a concrete editing action, not a general explanation.
+guardrails:
+  - "Do not invent a section id."
+  - "Do not rewrite the section."
+output_schema:
+  mapped_section_id: "string | null"
+  confidence: "number"
+  suggested_action: "string"
