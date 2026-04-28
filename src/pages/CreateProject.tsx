@@ -58,6 +58,7 @@ export const CreateProject: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadStage, setUploadStage] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [pendingProjectId, setPendingProjectId] = useState<string | null>(null);
   const [uploadOutcome, setUploadOutcome] = useState<UploadOutcome | null>(null);
@@ -73,6 +74,7 @@ export const CreateProject: React.FC = () => {
   const resetUploadState = () => {
     setSelectedFile(null);
     setUploadStage('');
+    setUploadProgress(0);
     setUploadOutcome(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -87,6 +89,7 @@ export const CreateProject: React.FC = () => {
     }
     setError(null);
     setUploadOutcome(null);
+    setUploadProgress(0);
     setSelectedFile(file);
     setTitle((current) => current.trim() || defaultTitleFromFile(file));
   };
@@ -109,7 +112,21 @@ export const CreateProject: React.FC = () => {
     }
 
     setUploadStage(`正在上传并解析 ${file.name}…`);
-    return api.projects.uploadFiles(projectId, file, fallbackText.trim() || undefined);
+    setUploadProgress(6);
+    return api.projects.uploadFiles(projectId, file, fallbackText.trim() || undefined, {
+      timeoutMs: 180000,
+      onProgress: (percent, phase) => {
+        setUploadProgress((current) => Math.max(current, percent));
+        if (phase === 'uploading') {
+          return;
+        }
+        if (phase === 'processing') {
+          setUploadStage(`æ–‡ä»¶å·²ä¸Šä¼ ï¼Œæ­£åœ¨è§£æž ${file.name}`);
+          return;
+        }
+        setUploadStage('æ–‡ä»¶è§£æžå®Œæˆï¼Œæ­£åœ¨è¿›å…¥è¯Šæ–­é¡µã€‚');
+      },
+    });
   };
 
   const handleUploadFlow = async (trimmedTitle: string) => {
@@ -121,6 +138,7 @@ export const CreateProject: React.FC = () => {
     try {
       setError(null);
       setUploading(true);
+      setUploadProgress(4);
       setUploadOutcome(null);
 
       let projectId = pendingProjectId;
@@ -138,8 +156,7 @@ export const CreateProject: React.FC = () => {
       }
 
       const uploaded = await performUpload(projectId, selectedFile);
-      const sourceFile = await api.projects.getSourceFile(uploaded.project.id);
-      const fileMeta = sourceFile.file;
+      const fileMeta = uploaded.uploadFile;
       const outcome: UploadOutcome = {
         projectId: uploaded.project.id,
         fileName: fileMeta?.fileName || selectedFile.name,
@@ -157,6 +174,7 @@ export const CreateProject: React.FC = () => {
       }
 
       setPendingProjectId(null);
+      setUploadProgress(100);
       navigate(`/diagnose/${uploaded.project.id}`, {
         state: {
           uploadResult: outcome,
@@ -164,6 +182,10 @@ export const CreateProject: React.FC = () => {
       });
     } catch (submitError) {
       console.error(submitError);
+      const message = submitError instanceof Error ? submitError.message : '上传或解析失败，请稍后重试。';
+      setError(message);
+      setUploadStage('');
+      setUploadProgress(0);
     } finally {
       setUploading(false);
       if (!pendingProjectId) {
@@ -338,6 +360,17 @@ export const CreateProject: React.FC = () => {
 
                   {uploadSummary ? <div className="upload-status-text">{uploadSummary}</div> : null}
                   {uploadStage ? <div className="upload-stage">{uploadStage}</div> : null}
+                  {(uploading || uploadProgress > 0) ? (
+                    <div className="upload-progress-block" aria-live="polite">
+                      <div className="upload-progress-track">
+                        <div className="upload-progress-fill" style={{ width: `${uploadProgress}%` }} />
+                      </div>
+                      <div className="upload-progress-meta">
+                        <span>{uploading ? '上传与解析进度' : '上传状态'}</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                    </div>
+                  ) : null}
 
                   {uploadOutcome ? (
                     <div className={`upload-outcome-card ${uploadOutcome.parseStatus === 'failed' ? 'error' : 'success'}`}>

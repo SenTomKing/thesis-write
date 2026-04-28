@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, CheckCircle, ChevronRight, FileText } from 'lucide-react';
 import { useAppStore } from '../store';
@@ -17,14 +17,24 @@ export const Diagnostics: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { bundle, loadProject, loading, error } = useAppStore();
+  const { bundle, loadProject, diagnoseProject, loading, error } = useAppStore();
   const uploadResult = (location.state as { uploadResult?: UploadResultState } | null)?.uploadResult;
+  const autoDiagnoseStartedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (id && (!bundle || bundle.project.id !== id)) {
       loadProject(id);
     }
   }, [id, bundle, loadProject]);
+
+  useEffect(() => {
+    if (!id || !bundle || bundle.project.id !== id) return;
+    if (loading.diagnose) return;
+    if (bundle.project.progressState !== 'needs-diagnosis') return;
+    if (autoDiagnoseStartedRef.current === id) return;
+    autoDiagnoseStartedRef.current = id;
+    diagnoseProject().catch(() => undefined);
+  }, [id, bundle, diagnoseProject, loading.diagnose]);
 
   if (loading.bundle) {
     return (
@@ -66,6 +76,18 @@ export const Diagnostics: React.FC = () => {
               <span>文件：{uploadResult.fileName}</span>
               <span>章节数：{uploadResult.sectionCount}</span>
               {uploadResult.parseError ? <span>解析备注：{uploadResult.parseError}</span> : null}
+            </div>
+          </Card>
+        ) : null}
+
+        {loading.diagnose ? (
+          <Card className="upload-feedback-card warning">
+            <div className="upload-feedback-header">
+              <AlertTriangle size={18} />
+              <span>正在生成诊断结果，请稍候。</span>
+            </div>
+            <div className="upload-feedback-meta">
+              <span>文稿已完成上传与解析，当前正在运行诊断。</span>
             </div>
           </Card>
         ) : null}

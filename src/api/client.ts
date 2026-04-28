@@ -23,6 +23,13 @@ class ApiError extends Error {
   }
 }
 
+type UploadPhase = 'uploading' | 'processing' | 'completed';
+
+type UploadHandlers = {
+  onProgress?: (percent: number, phase: UploadPhase) => void;
+  timeoutMs?: number;
+};
+
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -102,6 +109,73 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   return response.json();
 }
 
+function uploadFileRequest<T>(
+  endpoint: string,
+  formData: FormData,
+  handlers: UploadHandlers = {}
+): Promise<T> {
+  const url = `${API_BASE}${endpoint}`;
+  const timeoutMs = handlers.timeoutMs ?? 180000;
+
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.timeout = timeoutMs;
+    xhr.setRequestHeader('Accept', 'application/json');
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || !handlers.onProgress) return;
+      const percent = Math.max(6, Math.min(72, Math.round((event.loaded / event.total) * 72)));
+      handlers.onProgress(percent, 'uploading');
+    };
+
+    xhr.onreadystatechange = () => {
+      if (!handlers.onProgress) return;
+      if (xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED) {
+        handlers.onProgress(82, 'processing');
+      } else if (xhr.readyState === XMLHttpRequest.LOADING) {
+        handlers.onProgress(90, 'processing');
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new ApiError(0, { detail: humanizeDetail('Failed to fetch') }));
+    };
+
+    xhr.ontimeout = () => {
+      reject(
+        new ApiError(0, {
+          detail: humanizeDetail('Upload timed out while the server was parsing the file.'),
+        })
+      );
+    };
+
+    xhr.onload = () => {
+      let payload: any = null;
+      try {
+        payload = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+      } catch {
+        payload = { detail: xhr.statusText };
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        handlers.onProgress?.(100, 'completed');
+        resolve(payload as T);
+        return;
+      }
+
+      reject(
+        new ApiError(xhr.status, {
+          ...payload,
+          detail: humanizeDetail(payload?.detail || xhr.statusText || 'Upload failed'),
+        })
+      );
+    };
+
+    xhr.send(formData);
+  });
+}
+
 export const api = {
   health: () => request<{status: string}>('/health'),
   
@@ -114,11 +188,11 @@ export const api = {
     delete: (projectId: string, permanent = false) =>
       request<{ deletedProjectId: string; permanent: boolean }>(`/projects/${projectId}${permanent ? '?permanent=true' : ''}`, { method: 'DELETE' }),
     restore: (projectId: string) => request<{ restoredProjectId: string }>(`/projects/${projectId}/restore`, { method: 'POST' }),
-    uploadFiles: (projectId: string, file: File, fallbackText?: string) => {
+    uploadFiles: (projectId: string, file: File, fallbackText?: string, handlers?: UploadHandlers) => {
       const formData = new FormData();
       formData.append('file', file);
       if (fallbackText) formData.append('fallbackText', fallbackText);
-      return request<ProjectBundle>(`/projects/${projectId}/files`, { method: 'POST', body: formData });
+      return uploadFileRequest<ProjectBundle & { uploadFile?: SourceFilePreview }>(`/projects/${projectId}/files`, formData, handlers);
     },
     ingestUploadedFile: (
       projectId: string,

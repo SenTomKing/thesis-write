@@ -2566,6 +2566,17 @@ class BackendService:
             "deletedAt": row["deleted_at"] if "deleted_at" in row.keys() else None,
         }
 
+    def _serialize_source_file_status(self, row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "fileId": row["id"],
+            "projectId": row["project_id"],
+            "fileName": row["file_name"],
+            "contentType": row["content_type"] or "application/octet-stream",
+            "extension": Path(row["file_name"]).suffix.lower(),
+            "parseStatus": row["parse_status"],
+            "parseError": row["parse_error"],
+        }
+
     def _serialize_section(self, row: sqlite3.Row, *, source_page: int | None = None) -> dict[str, Any]:
         return {
             "id": row["id"],
@@ -2677,6 +2688,7 @@ class BackendService:
         open_issue_count = sum(1 for issue in issues if issue["status"] == "open")
         unresolved_comment_count = sum(1 for comment in comments if comment["status"] != "done")
         running_job = next((job for job in jobs if job["status"] == "running"), None)
+        has_completed_diagnosis = any(job["job_type"] == "diagnose" and job["status"] == "completed" for job in jobs)
         user_or_ai_revisions = sum(1 for revision in revisions if revision["action_type"] != "initial-import")
         language = project["language"]
 
@@ -2688,6 +2700,10 @@ class BackendService:
             status = "uploaded"
             progress_state = "needs-diagnosis"
             next_action = "先上传草稿或粘贴正文。" if language == "zh" else "Upload a draft or paste source text first."
+        elif not has_completed_diagnosis and open_issue_count == 0 and unresolved_comment_count == 0 and user_or_ai_revisions == 0:
+            status = "uploaded"
+            progress_state = "needs-diagnosis"
+            next_action = "æ–‡æ¡£å·²è§£æžï¼Œä¸‹ä¸€æ­¥ç”Ÿæˆè¯Šæ–­æŠ¥å‘Šã€‚" if language == "zh" else "Parsing finished. Generate the diagnosis report next."
         elif unresolved_comment_count > 0:
             status = "review-pending"
             progress_state = "needs-comments"
@@ -2860,23 +2876,16 @@ class BackendService:
             ).fetchone()
             if row is None:
                 return {"file": None}
-            extension = Path(row["file_name"]).suffix.lower()
             preview = self._build_source_preview_payload(row)
             return {
                 "file": {
-                    "fileId": row["id"],
-                    "projectId": row["project_id"],
-                    "fileName": row["file_name"],
-                    "contentType": row["content_type"] or "application/octet-stream",
-                    "extension": extension,
+                    **self._serialize_source_file_status(row),
                     "previewKind": preview_kind_for_file(row["file_name"], row["content_type"]),
                     "contentUrl": f"/api/source-files/{row['id']}/content",
                     "viewerKind": preview["viewerKind"],
                     "previewUrl": preview["previewUrl"],
                     "previewStatus": preview["previewStatus"],
                     "previewMessage": preview["previewMessage"],
-                    "parseStatus": row["parse_status"],
-                    "parseError": row["parse_error"],
                 }
             }
 
@@ -3403,16 +3412,23 @@ class BackendService:
                 connection.execute("UPDATE source_files SET parse_status = 'failed', parse_error = ? WHERE id = ?", (parse_error or "No text extracted", file_id))
                 self._finish_job(connection, job_id, "failed", "未提取到可用文本，请粘贴正文继续。")
                 self._refresh_project_state(connection, project_id)
+                source_file_row = connection.execute("SELECT * FROM source_files WHERE id = ?", (file_id,)).fetchone()
                 connection.commit()
-                return self.get_project_bundle(project_id)
+                bundle = self.get_project_bundle(project_id)
+                if source_file_row is not None:
+                    bundle["uploadFile"] = self._serialize_source_file_status(source_file_row)
+                return bundle
 
             self._replace_sections_with_text(connection, project_id=project_id, text=normalize_text(parsed_text), source_label=f"文件导入：{file_name}" if is_chinese(parsed_text) else f"File import: {file_name}", parse_confidence=parse_confidence)
             connection.execute("UPDATE source_files SET parse_status = ?, parse_error = ? WHERE id = ?", ("parsed" if not parse_error else "fallback", parse_error or None, file_id))
             self._finish_job(connection, job_id, "completed", "文件解析完成。" if not parse_error else "文件解析部分失败，已回退到粘贴文本。")
             self._refresh_project_state(connection, project_id)
+            source_file_row = connection.execute("SELECT * FROM source_files WHERE id = ?", (file_id,)).fetchone()
             connection.commit()
-        self.diagnose_project(project_id)
-        return self.get_project_bundle(project_id)
+        bundle = self.get_project_bundle(project_id)
+        if source_file_row is not None:
+            bundle["uploadFile"] = self._serialize_source_file_status(source_file_row)
+        return bundle
 
     def diagnose_project(self, project_id: str) -> dict[str, Any]:
         with self._connect() as connection:
