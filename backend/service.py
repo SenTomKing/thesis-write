@@ -34,7 +34,18 @@ from .storage import blob_enabled, is_remote_storage_ref, materialize_storage_re
 
 BACKEND_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BACKEND_DIR.parent
-DATA_DIR = BACKEND_DIR / "data"
+
+
+def resolve_runtime_data_dir() -> Path:
+    configured = (os.getenv("DRAFTREFINE_DATA_DIR") or "").strip()
+    if configured:
+        return Path(configured)
+    if (os.getenv("VERCEL") or "").strip():
+        return Path("/tmp/draftrefine-data")
+    return BACKEND_DIR / "data"
+
+
+DATA_DIR = resolve_runtime_data_dir()
 UPLOAD_DIR = DATA_DIR / "uploads"
 PREVIEW_DIR = DATA_DIR / "previews"
 PROMPTS_DIR = BACKEND_DIR / "prompts"
