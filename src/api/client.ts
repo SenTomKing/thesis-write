@@ -120,6 +120,14 @@ export const api = {
       if (fallbackText) formData.append('fallbackText', fallbackText);
       return request<ProjectBundle>(`/projects/${projectId}/files`, { method: 'POST', body: formData });
     },
+    ingestUploadedFile: (
+      projectId: string,
+      data: { storageRef: string; fileName: string; contentType?: string; fallbackText?: string }
+    ) =>
+      request<ProjectBundle>(`/projects/${projectId}/files/ingest`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
     diagnose: (projectId: string) => request<ProjectBundle>(`/projects/${projectId}/diagnose`, { method: 'POST' }),
   },
   

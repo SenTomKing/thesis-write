@@ -3337,6 +3337,36 @@ class BackendService:
             storage_path.write_bytes(raw_bytes)
             storage_ref = str(storage_path)
 
+        return self.ingest_uploaded_file(
+            project_id=project_id,
+            storage_ref=storage_ref,
+            file_name=file_name,
+            content_type=content_type,
+            fallback_text=fallback_text,
+            raw_bytes=raw_bytes,
+        )
+
+    def ingest_uploaded_file(
+        self,
+        *,
+        project_id: str,
+        storage_ref: str,
+        file_name: str,
+        content_type: str,
+        fallback_text: str,
+        raw_bytes: bytes | None = None,
+    ) -> dict[str, Any]:
+        extension = Path(file_name).suffix.lower()
+        if extension not in {".txt", ".doc", ".docx", ".pdf"}:
+            raise ValueError("Unsupported file type")
+        if raw_bytes is None:
+            source_path = materialize_storage_ref(
+                storage_ref=storage_ref,
+                file_name=file_name,
+                temp_dir=UPLOAD_DIR / "_materialized",
+            )
+            raw_bytes = source_path.read_bytes()
+
         with self._connect() as connection:
             file_id = new_id("file")
             connection.execute(

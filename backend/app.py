@@ -117,6 +117,13 @@ class LiteratureBatchFetchRequest(BaseModel):
     itemIds: list[str] = Field(default_factory=list)
 
 
+class ProjectFileIngestRequest(BaseModel):
+    storageRef: str = Field(min_length=1)
+    fileName: str = Field(min_length=1)
+    contentType: str = "application/octet-stream"
+    fallbackText: str = ""
+
+
 app = FastAPI(title="DraftRefine API", version="0.2.0")
 
 
@@ -233,6 +240,22 @@ async def upload_project_file(project_id: str, file: UploadFile = File(...), fal
             content_type=file.content_type or "application/octet-stream",
             raw_bytes=raw_bytes,
             fallback_text=fallbackText,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Project not found.") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/projects/{project_id}/files/ingest")
+def ingest_project_file(project_id: str, payload: ProjectFileIngestRequest) -> dict:
+    try:
+        return service.ingest_uploaded_file(
+            project_id=project_id,
+            storage_ref=payload.storageRef,
+            file_name=payload.fileName,
+            content_type=payload.contentType,
+            fallback_text=payload.fallbackText,
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="Project not found.") from None
