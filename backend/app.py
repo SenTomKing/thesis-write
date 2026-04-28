@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import uvicorn
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -557,6 +555,8 @@ def get_literature_search_run(run_id: str) -> dict:
 
 
 def main() -> None:
+    import uvicorn
+
     uvicorn.run("backend.app:app", host="127.0.0.1", port=8000, reload=False)
 
 
