@@ -1634,6 +1634,7 @@ class BackendService:
                     "deleted_at": "TEXT",
                 },
             )
+            connection.commit()
 
     def _ensure_columns(self, connection: sqlite3.Connection, table: str, columns: dict[str, str]) -> None:
         existing = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()}
