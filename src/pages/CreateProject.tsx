@@ -175,7 +175,7 @@ export const CreateProject: React.FC = () => {
 
       setPendingProjectId(null);
       setUploadProgress(100);
-      navigate(`/diagnose/${uploaded.project.id}`, {
+      navigate(`/editor/${uploaded.project.id}`, {
         state: {
           uploadResult: outcome,
         },
@@ -215,7 +215,7 @@ export const CreateProject: React.FC = () => {
           sourceType: 'text',
           text,
         });
-        navigate(`/diagnose/${bundle.project.id}`);
+        navigate(`/editor/${bundle.project.id}`);
       } catch (submitError) {
         console.error(submitError);
       }

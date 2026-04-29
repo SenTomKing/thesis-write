@@ -60,7 +60,7 @@ export const Dashboard: React.FC = () => {
 
   const handleOpenProject = async (projectId: string) => {
     await loadProject(projectId);
-    navigate(`/diagnose/${projectId}`);
+    navigate(`/editor/${projectId}`);
   };
 
   const handleDelete = async (projectId: string) => {

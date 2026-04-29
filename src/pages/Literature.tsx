@@ -529,7 +529,7 @@ export const Literature: React.FC = () => {
           <p className="page-description">检索文献、导入项目、尽量补全文，并把可用全文留在系统里供改写使用。</p>
         </div>
         <div className="literature-header-actions">
-          <Button variant="ghost" onClick={() => navigate(`/diagnose/${id}`)}>
+          <Button variant="ghost" onClick={() => navigate(`/editor/${id}`)}>
             <ArrowLeft size={16} className="mr-2" />
             返回诊断
           </Button>

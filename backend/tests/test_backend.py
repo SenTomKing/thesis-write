@@ -194,7 +194,7 @@ class BackendServiceTests(unittest.TestCase):
             self._run_meta(provider="mock-rewrite", model="rewrite-stub"),
         )
 
-    def test_create_project_from_text_generates_sections_and_issues(self) -> None:
+    def test_create_project_from_text_generates_sections_without_auto_diagnose(self) -> None:
         bundle = self.service.create_project(
             title="Interview validation project",
             doc_type="thesis",
@@ -206,7 +206,8 @@ class BackendServiceTests(unittest.TestCase):
 
         self.assertEqual(bundle["project"]["title"], "Interview validation project")
         self.assertGreaterEqual(len(bundle["sections"]), 3)
-        self.assertGreaterEqual(len(bundle["issues"]), 1)
+        self.assertEqual(len(bundle["issues"]), 0)
+        self.assertEqual(bundle["project"]["status"], "ready")
 
     def test_revision_accept_and_restore_flow(self) -> None:
         bundle = self.service.create_project(

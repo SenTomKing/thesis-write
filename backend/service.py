@@ -2688,36 +2688,31 @@ class BackendService:
         open_issue_count = sum(1 for issue in issues if issue["status"] == "open")
         unresolved_comment_count = sum(1 for comment in comments if comment["status"] != "done")
         running_job = next((job for job in jobs if job["status"] == "running"), None)
-        has_completed_diagnosis = any(job["job_type"] == "diagnose" and job["status"] == "completed" for job in jobs)
         user_or_ai_revisions = sum(1 for revision in revisions if revision["action_type"] != "initial-import")
         language = project["language"]
 
         if running_job and running_job["job_type"] == "parse":
             status = "parsing"
-            progress_state = "needs-diagnosis"
+            progress_state = "editing"
             next_action = "等待文档解析完成。" if language == "zh" else "Wait for document parsing to finish."
         elif not sections:
             status = "uploaded"
-            progress_state = "needs-diagnosis"
+            progress_state = "editing"
             next_action = "先上传草稿或粘贴正文。" if language == "zh" else "Upload a draft or paste source text first."
-        elif not has_completed_diagnosis and open_issue_count == 0 and unresolved_comment_count == 0 and user_or_ai_revisions == 0:
-            status = "uploaded"
-            progress_state = "needs-diagnosis"
-            next_action = "æ–‡æ¡£å·²è§£æžï¼Œä¸‹ä¸€æ­¥ç”Ÿæˆè¯Šæ–­æŠ¥å‘Šã€‚" if language == "zh" else "Parsing finished. Generate the diagnosis report next."
         elif unresolved_comment_count > 0:
             status = "review-pending"
             progress_state = "needs-comments"
             next_comment = next((comment for comment in comments if comment["status"] != "done"), None)
             next_action = next_comment["suggested_action"] if next_comment else ("先消化导师意见，再回到章节编辑。" if language == "zh" else "Resolve reviewer comments before continuing revisions.")
         elif open_issue_count > 0:
-            status = "revising" if user_or_ai_revisions > len(sections) else "diagnosed"
+            status = "revising"
             progress_state = "active-revision"
             next_issue = next((issue for issue in issues if issue["status"] == "open"), None)
             next_action = next_issue["suggested_action"] if next_issue else ("先处理高优先级诊断问题。" if language == "zh" else "Start with the highest-priority diagnostic issue.")
         else:
             status = "ready"
-            progress_state = "ready-to-export"
-            next_action = "可以导出访谈快照并继续收集反馈。" if language == "zh" else "Ready to export a review snapshot."
+            progress_state = "editing"
+            next_action = "当前文稿已可直接进入编辑器继续改稿。" if language == "zh" else "Open the editor and continue revising the current draft."
 
         connection.execute(
             """
@@ -3312,14 +3307,13 @@ class BackendService:
                   id, title, type, language, source_type, status, progress_state, next_action,
                   overview, created_at, updated_at, file_id, last_job_id, issue_count,
                   unresolved_comment_count, pending_revision_count
-                ) VALUES (?, ?, ?, ?, ?, 'uploaded', 'needs-diagnosis', ?, ?, ?, ?, NULL, NULL, 0, 0, 0)
+                ) VALUES (?, ?, ?, ?, ?, 'uploaded', 'editing', ?, ?, ?, ?, NULL, NULL, 0, 0, 0)
                 """,
-                (project_id, title.strip(), doc_type, language, source_type if source_type in {"demo", "text", "file"} else "text", "先上传草稿或粘贴正文。" if language == "zh" else "Upload a draft or paste source text first.", note.strip() or ("新项目已创建，等待解析与诊断。" if language == "zh" else "New project created and waiting for parsing."), now, now),
+                (project_id, title.strip(), doc_type, language, source_type if source_type in {"demo", "text", "file"} else "text", "先上传草稿或粘贴正文。" if language == "zh" else "Upload a draft or paste source text first.", note.strip() or ("新项目已创建，等待解析与编辑。" if language == "zh" else "New project created and waiting for parsing."), now, now),
             )
             connection.commit()
         if text.strip():
             self.ingest_plain_text(project_id=project_id, text=text, source_label="粘贴文本" if language == "zh" else "Pasted text")
-            self.diagnose_project(project_id)
         return self.get_project_bundle(project_id)
 
     def ingest_plain_text(self, *, project_id: str, text: str, source_label: str) -> dict[str, Any]:

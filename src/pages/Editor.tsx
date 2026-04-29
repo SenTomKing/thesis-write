@@ -740,7 +740,7 @@ export const Editor: React.FC = () => {
     <div className="editor-shell">
       <header className="editor-header">
         <div className="editor-header__left">
-          <Button variant="ghost" onClick={() => navigate(`/diagnose/${bundle.project.id}`)}>
+          <Button variant="ghost" onClick={() => navigate(`/`)}>
             <ArrowLeft size={18} className="mr-2" />
             返回诊断
           </Button>
