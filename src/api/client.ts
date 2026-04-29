@@ -72,6 +72,9 @@ function humanizeDetail(detail: string): string {
   if (/No extractable text/i.test(text)) {
     return 'PDF 已拿到，但暂时没能抽取出可用于检索的正文；你仍然可以下载原文。';
   }
+  if (/Server failed while handling the uploaded file/i.test(text)) {
+    return '服务端在保存或解析上传文件时失败。请稍后重试；如果持续失败，请查看部署日志。';
+  }
   return text;
 }
 
@@ -155,7 +158,7 @@ function uploadFileRequest<T>(
       try {
         payload = xhr.responseText ? JSON.parse(xhr.responseText) : null;
       } catch {
-        payload = { detail: xhr.statusText };
+        payload = { detail: xhr.responseText || xhr.statusText };
       }
 
       if (xhr.status >= 200 && xhr.status < 300) {
@@ -167,7 +170,7 @@ function uploadFileRequest<T>(
       reject(
         new ApiError(xhr.status, {
           ...payload,
-          detail: humanizeDetail(payload?.detail || xhr.statusText || 'Upload failed'),
+          detail: humanizeDetail(payload?.detail || xhr.statusText || 'Server failed while handling the uploaded file.'),
         })
       );
     };

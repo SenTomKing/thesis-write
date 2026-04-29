@@ -3334,15 +3334,20 @@ class BackendService:
     def upload_file(self, *, project_id: str, file_name: str, content_type: str, raw_bytes: bytes, fallback_text: str) -> dict[str, Any]:
         extension = Path(file_name).suffix.lower()
         storage_name = f"{uuid.uuid4().hex[:12]}{extension}"
+        storage_path = UPLOAD_DIR / storage_name
+        storage_ref = ""
         if blob_enabled():
-            blob_info = upload_bytes_to_blob(
-                pathname=f"draftrefine/source-files/{storage_name}",
-                body=raw_bytes,
-                content_type=content_type or "application/octet-stream",
-            )
-            storage_ref = blob_info["url"]
+            try:
+                blob_info = upload_bytes_to_blob(
+                    pathname=f"draftrefine/source-files/{storage_name}",
+                    body=raw_bytes,
+                    content_type=content_type or "application/octet-stream",
+                )
+                storage_ref = blob_info["url"]
+            except Exception:
+                storage_path.write_bytes(raw_bytes)
+                storage_ref = str(storage_path)
         else:
-            storage_path = UPLOAD_DIR / storage_name
             storage_path.write_bytes(raw_bytes)
             storage_ref = str(storage_path)
 
