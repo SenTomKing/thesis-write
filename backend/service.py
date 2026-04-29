@@ -3035,6 +3035,12 @@ class BackendService:
         return mapped_pages
 
     def _ensure_docx_preview_pdf(self, row: sqlite3.Row) -> Path | None:
+        preview_path = PREVIEW_DIR / f"{row['id']}.pdf"
+        if preview_path.exists():
+            return preview_path
+        soffice_binary = self._resolve_soffice_binary()
+        if soffice_binary is None:
+            return None
         try:
             source_path = materialize_storage_ref(
                 storage_ref=row["storage_path"],
@@ -3042,12 +3048,6 @@ class BackendService:
                 temp_dir=UPLOAD_DIR / "_materialized",
             )
         except FileNotFoundError:
-            return None
-        preview_path = PREVIEW_DIR / f"{row['id']}.pdf"
-        if preview_path.exists():
-            return preview_path
-        soffice_binary = self._resolve_soffice_binary()
-        if soffice_binary is None:
             return None
         try:
             subprocess.run(

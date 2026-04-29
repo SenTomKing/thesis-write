@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import os
 import urllib.request
@@ -52,17 +51,13 @@ def upload_bytes_to_blob(*, pathname: str, body: bytes, content_type: str, add_r
     }
 
 
-async def _download_private_blob_async(storage_ref: str) -> bytes:
-    if AsyncBlobClient is None:
-        raise FileNotFoundError(storage_ref)
-    client = AsyncBlobClient()
-    result = await client.get(storage_ref, access="private")
-    if result is None or result.status_code != 200 or result.stream is None:
-        raise FileNotFoundError(storage_ref)
-    chunks: list[bytes] = []
-    async for chunk in result.stream:
-        chunks.append(chunk)
-    return b"".join(chunks)
+def _download_remote_bytes(storage_ref: str) -> bytes:
+    headers = {"User-Agent": "DraftRefine/1.0 storage bridge"}
+    if is_vercel_blob_ref(storage_ref) and blob_token():
+        headers["Authorization"] = f"Bearer {blob_token()}"
+    request = urllib.request.Request(storage_ref, headers=headers)
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.read()
 
 
 def materialize_storage_ref(*, storage_ref: str, file_name: str, temp_dir: Path) -> Path:
@@ -82,11 +77,5 @@ def materialize_storage_ref(*, storage_ref: str, file_name: str, temp_dir: Path)
     if cached_path.exists():
         return cached_path
 
-    if is_vercel_blob_ref(normalized_ref) and blob_token():
-        cached_path.write_bytes(asyncio.run(_download_private_blob_async(normalized_ref)))
-        return cached_path
-
-    request = urllib.request.Request(normalized_ref, headers={"User-Agent": "DraftRefine/1.0 storage bridge"})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        cached_path.write_bytes(response.read())
+    cached_path.write_bytes(_download_remote_bytes(normalized_ref))
     return cached_path
