@@ -3444,9 +3444,28 @@ class BackendService:
             if not sections_rows:
                 raise ValueError("Project has no sections to diagnose.")
             sections = [self._serialize_section(row) for row in sections_rows]
+            diagnose_sections = []
+            for section in sections:
+                normalized_text = normalize_text(section["currentText"] or "")
+                excerpt = normalized_text[:1200]
+                diagnose_sections.append(
+                    {
+                        "id": section["id"],
+                        "title": section["title"],
+                        "level": section["level"],
+                        "textLength": len(normalized_text),
+                        "excerpt": excerpt,
+                    }
+                )
             prompt = self._load_prompt("diagnose", project["language"], "diagnose")
             schema_hint = prompt.get("schema_hint") or json.dumps([{"section_id": "section-xxx", "issue_type": "structure", "severity": "high", "title": "issue title", "detail": "why it matters", "suggested_action": "next concrete step"}], ensure_ascii=False, indent=2)
-            model_output, run_meta = self._call_provider_json(action_name="diagnose", prompt_version=prompt["version_tag"], system_prompt=prompt["system_prompt"], input_payload={"projectTitle": project["title"], "language": project["language"], "sections": sections}, schema_hint=schema_hint)
+            model_output, run_meta = self._call_provider_json(
+                action_name="diagnose",
+                prompt_version=prompt["version_tag"],
+                system_prompt=prompt["system_prompt"],
+                input_payload={"projectTitle": project["title"], "language": project["language"], "sections": diagnose_sections},
+                schema_hint=schema_hint,
+            )
             section_ids = {section["id"] for section in sections}
             if isinstance(model_output, list) and model_output:
                 issues = [issue for issue in model_output if isinstance(issue, dict) and issue.get("section_id") in section_ids]
@@ -3466,7 +3485,7 @@ class BackendService:
                     """,
                     (new_id("issue"), project_id, issue["section_id"], issue["issue_type"], issue["severity"], issue["title"], issue["detail"], issue["suggested_action"], utc_now()),
                 )
-            self._insert_llm_run(connection, project_id=project_id, section_id=None, action_name="diagnose", prompt_version=prompt["version_tag"], provider=run_meta["provider"], model=run_meta["model"], status=run_meta["status"], latency_ms=run_meta["latency_ms"], input_text=json.dumps(sections, ensure_ascii=False), output_text=json.dumps(issues, ensure_ascii=False), error=run_meta["error"])
+            self._insert_llm_run(connection, project_id=project_id, section_id=None, action_name="diagnose", prompt_version=prompt["version_tag"], provider=run_meta["provider"], model=run_meta["model"], status=run_meta["status"], latency_ms=run_meta["latency_ms"], input_text=json.dumps(diagnose_sections, ensure_ascii=False), output_text=json.dumps(issues, ensure_ascii=False), error=run_meta["error"])
             self._finish_job(connection, job_id, "completed", "诊断报告已更新。")
             self._refresh_project_state(connection, project_id)
             connection.commit()
