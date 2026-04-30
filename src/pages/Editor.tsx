@@ -138,7 +138,10 @@ function createLocalProgressDriver(
 function absoluteApiUrl(path?: string | null) {
   if (!path) return '';
   if (/^https?:\/\//i.test(path)) return path;
-  return `http://127.0.0.1:8000${path.startsWith('/') ? path : `/${path}`}`;
+  if (typeof window !== 'undefined') {
+    return new URL(path.startsWith('/') ? path : `/${path}`, window.location.origin).toString();
+  }
+  return path.startsWith('/') ? path : `/${path}`;
 }
 
 function toPlainString(value: unknown) {
@@ -554,10 +557,21 @@ export const Editor: React.FC = () => {
     };
   }, [bundle?.project.id]);
 
-  const activeSection = useMemo(
-    () => bundle?.sections.find((section) => section.id === activeSectionId) || null,
-    [activeSectionId, bundle]
-  );
+  const activeSection = useMemo<any>(() => {
+    if (!bundle) return null;
+    return (
+      bundle.sections.find((section) => section.id === activeSectionId) ||
+      bundle.sections[0] || {
+        id: '__manual-input__',
+        projectId: bundle.project.id,
+        title: '未提取章节',
+        currentText: '',
+        originalText: '',
+        orderIndex: 0,
+        path: 'manual-input',
+      }
+    );
+  }, [activeSectionId, bundle]);
 
   const activeComments = useMemo(() => {
     if (!bundle || !activeSectionId) return [];
@@ -587,6 +601,9 @@ export const Editor: React.FC = () => {
 
   const sourcePreviewUrl = absoluteApiUrl(sourceFile?.previewUrl || sourceFile?.contentUrl);
   const canShowPdfPreview = sourceFile?.viewerKind === 'pdf' && Boolean(sourcePreviewUrl);
+  const hasSections = Boolean(bundle?.sections.length);
+  const sectionDisplayTitle = activeSection?.title || '未提取章节';
+  const sourceStatusMessage = userFacingMessage(sourceFile?.parseError || sourceFile?.previewMessage || '');
   const hasWorkspaceDraft = Boolean(
     workspaceText.trim() || workspaceCandidate || customInstruction.trim() || feedback.trim()
   );
@@ -611,7 +628,7 @@ export const Editor: React.FC = () => {
   }, [activeCenterView, canShowPdfPreview]);
 
   const runRevision = async (actionType: string, options?: { commentId?: string | null; note?: string }) => {
-    if (!bundle || !activeSection) return;
+    if (!bundle) return;
     const text = workspaceText.trim();
     if (!text) {
       setRequestError('先把你要修改的原文粘贴到左侧输入框。');
@@ -632,7 +649,7 @@ export const Editor: React.FC = () => {
     try {
       const result = await api.agent.revise({
         projectId: bundle.project.id,
-        title: `${bundle.project.title} / ${activeSection.title}`,
+        title: activeSection ? `${bundle.project.title} / ${activeSection.title}` : bundle.project.title,
         text,
         actionType,
         note,
@@ -729,7 +746,7 @@ export const Editor: React.FC = () => {
     );
   }
 
-  if (!bundle || !activeSection) {
+  if (!bundle) {
     return <div className="editor-error-banner">{userFacingMessage(bundleError) || '无法加载当前章节。'}</div>;
   }
 
@@ -746,7 +763,7 @@ export const Editor: React.FC = () => {
           </Button>
           <div className="editor-header__titles">
             <h2>{bundle.project.title}</h2>
-            <span>{activeSection.title}</span>
+            <span>{sectionDisplayTitle}</span>
           </div>
         </div>
 
@@ -762,7 +779,7 @@ export const Editor: React.FC = () => {
         <aside className="editor-sections">
           <div className="editor-sections__title">章节导航</div>
           <div className="editor-sections__list">
-            {bundle.sections.map((section) => (
+            {hasSections ? bundle.sections.map((section) => (
               <button
                 key={section.id}
                 type="button"
@@ -774,7 +791,12 @@ export const Editor: React.FC = () => {
                   {section.issueCount || 0} 个问题 · {section.commentCount || 0} 条意见
                 </div>
               </button>
-            ))}
+            )) : (
+              <div className="editor-section-empty">
+                <strong>尚未提取到章节</strong>
+                <span>{sourceStatusMessage || '原稿已经上传，但当前没有可用章节。你仍然可以切到文本页面，手动粘贴需要修改的内容继续工作。'}</span>
+              </div>
+            )}
           </div>
         </aside>
 
@@ -802,7 +824,7 @@ export const Editor: React.FC = () => {
               <div className="reference-stage__top">
                 <div>
                   <div className="reference-stage__eyebrow">原文参考</div>
-                  <h3>{activeSection.title}</h3>
+                  <h3>{sectionDisplayTitle}</h3>
                 </div>
                 <div className="reference-stage__meta">
                   {activeSection.sourcePage ? <span>原稿第 {activeSection.sourcePage} 页</span> : null}
@@ -842,14 +864,14 @@ export const Editor: React.FC = () => {
                     </div>
                   </div>
                   <PdfPagePreview
-                    key={`${activeSection.id}-${previewPage}-${sourcePreviewUrl}`}
+                    key={`${activeSection?.id || '__manual-input__'}-${previewPage}-${sourcePreviewUrl}`}
                     url={sourcePreviewUrl}
                     pageNumber={previewPage}
                     onPageCount={setPreviewPageCount}
                   />
                 </div>
               ) : (
-                <ReferenceTextPreview text={activeSection.currentText} />
+                <ReferenceTextPreview text={activeSection?.currentText || ''} />
               )}
             </section>
           ) : (
