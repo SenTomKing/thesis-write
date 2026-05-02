@@ -55,19 +55,19 @@ function humanizeDetail(detail: string): string {
   const text = String(detail || '').trim();
   if (!text) return '请求失败，请稍后重试。';
   if (/Failed to fetch/i.test(text)) {
-    return '前后端连接中断，请确认本地后端仍在运行，然后重试。';
+    return '请求没有送达，请确认服务仍在运行后重试。';
   }
   if (/timed?\s*out|read operation timed out|timeout/i.test(text)) {
-    return '模型响应超时，系统已重试但仍未完成，请稍后再试。';
+    return '处理超时，请稍后重试。';
   }
   if (/Writer expanded the text beyond the allowed revision range/i.test(text)) {
-    return '模型把改写范围拉得过大，系统已多次收敛但仍未通过，请换成更具体的动作或缩小改写目标。';
+    return '这次改动范围过大，请换成更具体的动作或缩小改写目标。';
   }
   if (/Model returned unchanged text/i.test(text)) {
-    return '模型没有生成有效改写，请重试，或补充更明确的修改要求。';
+    return '这次没有生成有效改写，请重试，或补充更明确的修改要求。';
   }
   if (/invalid rewrite payload/i.test(text)) {
-    return '模型返回格式不符合要求，这次改写未生成可用结果，请重试。';
+    return '这次改写没有生成可用结果，请重试。';
   }
   if (/No extractable text/i.test(text)) {
     return 'PDF 已拿到，但暂时没能抽取出可用于检索的正文；你仍然可以下载原文。';

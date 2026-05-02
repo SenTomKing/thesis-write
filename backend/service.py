@@ -1664,19 +1664,36 @@ class BackendService:
         prompt["version_tag"] = f"{category}/{prompt_path.stem}@{prompt.get('version', '1.0.0')}"
         return prompt
 
-    def _provider_candidates(self) -> list[dict[str, str]]:
+    def _provider_candidates(self, model_profile: str = "normal") -> list[dict[str, str]]:
+        normalized_profile = "pro" if model_profile == "pro" else "normal"
+        normal_deepseek_model = os.getenv(
+            "DRAFTREFINE_DEEPSEEK_MODEL",
+            os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        )
+        pro_deepseek_model = os.getenv(
+            "DRAFTREFINE_DEEPSEEK_PRO_MODEL",
+            os.getenv("DEEPSEEK_PRO_MODEL", normal_deepseek_model),
+        )
+        normal_qwen_model = os.getenv(
+            "DRAFTREFINE_QWEN_MODEL",
+            os.getenv("QWEN_MODEL", "qwen-plus"),
+        )
+        pro_qwen_model = os.getenv(
+            "DRAFTREFINE_QWEN_PRO_MODEL",
+            os.getenv("QWEN_PRO_MODEL", normal_qwen_model),
+        )
         return [
             {
                 "provider": "deepseek",
                 "api_key": os.getenv("DRAFTREFINE_DEEPSEEK_API_KEY", os.getenv("DEEPSEEK_API_KEY", "")),
                 "base_url": os.getenv("DRAFTREFINE_DEEPSEEK_BASE_URL", os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")),
-                "model": os.getenv("DRAFTREFINE_DEEPSEEK_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-chat")),
+                "model": pro_deepseek_model if normalized_profile == "pro" else normal_deepseek_model,
             },
             {
                 "provider": "qwen",
                 "api_key": os.getenv("DRAFTREFINE_QWEN_API_KEY", os.getenv("QWEN_API_KEY", "")),
                 "base_url": os.getenv("DRAFTREFINE_QWEN_BASE_URL", os.getenv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")),
-                "model": os.getenv("DRAFTREFINE_QWEN_MODEL", os.getenv("QWEN_MODEL", "qwen-plus")),
+                "model": pro_qwen_model if normalized_profile == "pro" else normal_qwen_model,
             },
         ]
 
@@ -1689,7 +1706,16 @@ class BackendService:
             raise ValueError("No JSON found in model response")
         return json.loads(match.group(1))
 
-    def _call_provider_json(self, *, action_name: str, prompt_version: str, system_prompt: str, input_payload: dict[str, Any], schema_hint: str) -> tuple[Any | None, dict[str, Any]]:
+    def _call_provider_json(
+        self,
+        *,
+        action_name: str,
+        prompt_version: str,
+        system_prompt: str,
+        input_payload: dict[str, Any],
+        schema_hint: str,
+        model_profile: str = "normal",
+    ) -> tuple[Any | None, dict[str, Any]]:
         payload_text = json.dumps(input_payload, ensure_ascii=False, indent=2)
         timeout_seconds = float(os.getenv("DRAFTREFINE_MODEL_TIMEOUT_SECONDS", "10"))
         max_attempts = max(1, int(os.getenv("DRAFTREFINE_MODEL_MAX_RETRIES", "2")))
@@ -1697,7 +1723,7 @@ class BackendService:
         max_tokens = 1800 if action_name in {"academic-rewrite", "expand", "comment-revision"} else 900
         attempt_logs: list[dict[str, Any]] = []
         configured_provider = False
-        for candidate in self._provider_candidates():
+        for candidate in self._provider_candidates(model_profile):
             if not candidate["api_key"]:
                 continue
             configured_provider = True
@@ -1831,6 +1857,7 @@ class BackendService:
         action_name: str,
         input_payload: dict[str, Any],
         schema_hint: str,
+        model_profile: str = "normal",
     ) -> tuple[Any | None, dict[str, Any]]:
         prompt = self._load_prompt(category, language, action_name)
         model_output, run_meta = self._call_provider_json(
@@ -1839,6 +1866,7 @@ class BackendService:
             system_prompt=prompt["system_prompt"],
             input_payload=input_payload,
             schema_hint=prompt.get("schema_hint") or schema_hint,
+            model_profile=model_profile,
         )
         return model_output, {
             "actionName": action_name,
@@ -3502,6 +3530,7 @@ class BackendService:
         comment_id: str | None,
         comment_context: str,
         previous_candidate_text: str,
+        model_profile: str = "normal",
     ) -> dict[str, Any]:
         request_id = self._start_revision_request(
             connection,
@@ -3544,6 +3573,7 @@ class BackendService:
                 action_name=action_name,
                 input_payload=payload,
                 schema_hint=schema_hint,
+                model_profile=model_profile,
             ),
             writer_call=lambda action_name, payload, schema_hint: self._run_prompt_json(
                 category="rewrite",
@@ -3551,6 +3581,7 @@ class BackendService:
                 action_name=action_name,
                 input_payload=payload,
                 schema_hint=schema_hint,
+                model_profile=model_profile,
             ),
             review_call=lambda action_name, payload, schema_hint: self._run_prompt_json(
                 category="review",
@@ -3558,6 +3589,7 @@ class BackendService:
                 action_name=action_name,
                 input_payload=payload,
                 schema_hint=schema_hint,
+                model_profile=model_profile,
             ),
             heuristic_rewrite=heuristic_rewrite,
         )
@@ -3658,6 +3690,8 @@ class BackendService:
         result["promptVersion"] = writer_step["prompt_version"] if writer_step else "rewrite/unknown"
         result["model"] = writer_step["model"] if writer_step else "unknown"
         result["provider"] = writer_step["provider"] if writer_step else "unknown"
+        result["revisionMode"] = "pro" if model_profile == "pro" else "normal"
+        result["agentTrace"]["revisionMode"] = result["revisionMode"]
         return result
 
     def revise_text(
@@ -3665,6 +3699,7 @@ class BackendService:
         *,
         text: str,
         action_type: str,
+        mode: str = "normal",
         project_id: str | None = None,
         title: str = "",
         note: str = "",
@@ -3686,6 +3721,7 @@ class BackendService:
             if selected_text.strip() and matched_span is None:
                 raise ValueError("Selected text could not be matched in the provided input.")
             target_text = text[matched_span[0] : matched_span[1]] if matched_span else text
+            model_profile = "pro" if mode == "pro" else "normal"
             project_language = project["language"] if project is not None else ("zh" if is_chinese(text) else "en")
             language = detect_revision_language(target_text or text, fallback=project_language)
             effective_title = title.strip() or (project["title"] if project is not None else ("未命名输入" if language == "zh" else "Untitled input"))
@@ -3713,6 +3749,7 @@ class BackendService:
                 comment_id=comment_id,
                 comment_context=comment_context,
                 previous_candidate_text=previous_candidate_text.strip(),
+                model_profile=model_profile,
             )
             candidate_text = (
                 f"{text[:matched_span[0]]}{result['candidateTargetText']}{text[matched_span[1]:]}"
@@ -3760,6 +3797,7 @@ class BackendService:
                 "citationAudit": result["citationAudit"],
                 "citationVerification": result["citationVerification"],
                 "agentTrace": result["agentTrace"],
+                "revisionMode": result.get("revisionMode", model_profile),
             }
 
     def verify_citations(self, *, project_id: str, text: str) -> dict[str, Any]:

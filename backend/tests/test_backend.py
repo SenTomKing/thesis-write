@@ -102,12 +102,14 @@ class BackendServiceTests(unittest.TestCase):
         system_prompt: str,
         input_payload: dict,
         schema_hint: str,
+        model_profile: str = "normal",
     ) -> tuple[object, dict[str, object]]:
         self.provider_calls.append(
             {
                 "action_name": action_name,
                 "prompt_version": prompt_version,
                 "input_payload": input_payload,
+                "model_profile": model_profile,
             }
         )
         if action_name == "diagnose":
@@ -587,6 +589,30 @@ class BackendServiceTests(unittest.TestCase):
                 action_type="custom-instruction",
                 note="",
             )
+
+    def test_revision_mode_routes_model_profile(self) -> None:
+        normal = self.service.revise_text(
+            text="This introduction is kind of broad and repeats the same claim several times.",
+            action_type="academic-rewrite",
+            note="Refine the paragraph.",
+            mode="normal",
+        )
+        pro = self.service.revise_text(
+            text="This introduction is kind of broad and repeats the same claim several times.",
+            action_type="academic-rewrite",
+            note="Refine the paragraph.",
+            mode="pro",
+        )
+
+        rewrite_profiles = [
+            call["model_profile"]
+            for call in self.provider_calls
+            if str(call["prompt_version"]).startswith("rewrite/")
+        ]
+        self.assertIn("normal", rewrite_profiles)
+        self.assertIn("pro", rewrite_profiles)
+        self.assertEqual(normal["revisionMode"], "normal")
+        self.assertEqual(pro["revisionMode"], "pro")
 
     def test_local_hybrid_rag_indexes_and_feeds_revision_agent(self) -> None:
         bundle = self.service.create_project(

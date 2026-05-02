@@ -36,6 +36,7 @@ class RewriteRequest(BaseModel):
 class AgentRevisionRequest(BaseModel):
     text: str = Field(min_length=1)
     actionType: str
+    mode: str = "normal"
     projectId: str | None = None
     title: str = ""
     note: str = ""
@@ -306,6 +307,7 @@ def revise_text(payload: AgentRevisionRequest) -> dict:
         return service.revise_text(
             text=payload.text,
             action_type=payload.actionType,
+            mode=payload.mode,
             project_id=payload.projectId,
             title=payload.title,
             note=payload.note,

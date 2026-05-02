@@ -403,21 +403,21 @@ export const Literature: React.FC = () => {
       await loadLibrary(id);
       if (result.downloadUrl) {
         triggerDownload(result.downloadUrl);
-        setNotice('Full text downloaded and browser download started.');
+        setNotice('全文已获取，浏览器下载已开始。');
       } else if (result.warning) {
         setNotice(result.warning);
       } else {
-        setNotice('Saved the source link for this full text.');
+        setNotice('已保存该全文的来源链接。');
       }
       setError(null);
       await driver.complete(
         result.chunkCount && result.chunkCount > 0
-          ? `Full text indexed with ${result.chunkCount} retrievable chunks`
-          : 'Full-text fetch finished'
+          ? `全文已整理，可用于后续参考与改写（${result.chunkCount} 条内容）。`
+          : '全文获取完成'
       );
     } catch (err: any) {
       driver.fail();
-      setError(err.message || 'Full-text fetch failed');
+      setError(err.message || '全文获取失败');
       setNotice(null);
     } finally {
       setLoadingKey(null);
@@ -461,12 +461,12 @@ export const Literature: React.FC = () => {
       await api.literature.indexText(id, activeLibraryItem.id, indexText.trim());
       await loadLibrary(id);
       setIndexText('');
-      setNotice('Indexed full-text content into the project library for rewriting and evidence retrieval.');
+      setNotice('已把全文加入项目文献库，可用于后续改写与参考。');
       setError(null);
-      await driver.complete('Full-text content indexed locally');
+      await driver.complete('全文已加入项目文献库');
     } catch (err: any) {
       driver.fail();
-      setError(err.message || 'Full-text indexing failed');
+      setError(err.message || '全文加入项目文献库失败');
       setNotice(null);
     } finally {
       setLoadingKey(null);

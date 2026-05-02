@@ -131,6 +131,8 @@ export type RewriteProgress = {
   percent: number;
 };
 
+export type RevisionMode = 'normal' | 'pro';
+
 export type RevisionCandidate = {
   id: string;
   projectId: string;
@@ -189,6 +191,7 @@ export type AgentRevisionResult = {
   text: string;
   summary: string;
   actionType: string;
+  revisionMode?: RevisionMode | string;
   promptVersion: string;
   model: string;
   provider: string;

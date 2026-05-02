@@ -19,12 +19,12 @@ import { api } from '../api/client';
 import { useAppStore } from '../store';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
-import type { AgentRevisionResult, EvidenceItem, RewriteProgress, SourceFilePreview } from '../types';
+import type { AgentRevisionResult, EvidenceItem, RewriteProgress, RevisionMode, SourceFilePreview } from '../types';
 import './Editor.css';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
-type RightTab = 'rewrite' | 'reference' | 'trace' | 'comments';
+type RightTab = 'rewrite' | 'reference' | 'comments';
 type CenterView = 'review' | 'draft';
 
 type ActionConfig = {
@@ -45,15 +45,15 @@ const FAST_ACTIONS = new Set(['shorten', 'transition-polish', 'unify-terms']);
 
 const PROGRESS_PHASES: Record<'fast' | 'full', Array<{ label: string; ratio: number }>> = {
   fast: [
-    { label: '准备输入文本', ratio: 0.2 },
+    { label: '准备输入内容', ratio: 0.2 },
     { label: '生成改写结果', ratio: 0.76 },
-    { label: '校验改写结果', ratio: 0.95 },
+    { label: '整理输出内容', ratio: 0.95 },
   ],
   full: [
-    { label: '理解改写任务', ratio: 0.14 },
-    { label: '检索相关证据', ratio: 0.42 },
+    { label: '理解改写目标', ratio: 0.14 },
+    { label: '整理参考内容', ratio: 0.42 },
     { label: '生成改写结果', ratio: 0.8 },
-    { label: '校验改写结果', ratio: 0.96 },
+    { label: '整理输出内容', ratio: 0.96 },
   ],
 };
 
@@ -64,14 +64,18 @@ function wait(ms: number) {
 function userFacingMessage(message?: string | null) {
   const text = String(message || '').trim();
   if (!text) return '';
-  if (/Failed to fetch/i.test(text)) return '请求没有送达到本地后端，请确认后端服务仍在运行。';
-  if (/timed?\s*out|timeout/i.test(text)) return '模型响应超时，本次改写已中止，请稍后重试。';
+  if (/Failed to fetch/i.test(text)) return '请求没有送达，请确认服务仍在运行后重试。';
+  if (/timed?\s*out|timeout/i.test(text)) return '处理超时，请稍后重试。';
   if (/unchanged/i.test(text)) return '本次改写没有形成有效差异，请换一个动作或补充更明确的原文。';
-  if (/allowed revision range|over_expansion/i.test(text)) return '本次改写偏离原文过大，系统已收回。';
-  if (/citation/i.test(text) && /unverified|unsupported/i.test(text)) return '本次改写涉及引用，但当前证据不足，请先补充文献。';
+  if (/allowed revision range|over_expansion/i.test(text)) return '这次改动偏离原文过大，系统已收回，请换一个更具体的要求。';
+  if (/citation/i.test(text) && /unverified|unsupported/i.test(text)) return '这次改写涉及来源内容，但当前参考不足，请先补充文献。';
   if (/stable revision plan|interpret/i.test(text)) return '系统没有稳定理解你的自定义要求，请换一种更具体的说法。';
-  if (/model invocation/i.test(text) || /service unavailable/i.test(text)) return '模型服务暂时不可用，请稍后再试。';
+  if (/model invocation/i.test(text) || /service unavailable/i.test(text)) return '当前改写暂时不可用，请稍后再试。';
   return text;
+}
+
+function revisionModeLabel(mode?: string | null) {
+  return mode === 'pro' ? '深度模式' : '普通模式';
 }
 
 function laneForAction(actionType: string): 'fast' | 'full' {
@@ -172,24 +176,24 @@ function evidenceKindLabel(sourceKind: string) {
 function citationStatusLabel(status?: string | null) {
   switch (status) {
     case 'verified':
-      return '已核验';
+      return '来源已匹配';
     case 'partially-verified':
-      return '部分核验';
+      return '来源部分匹配';
     case 'unverified':
-      return '待核验';
+      return '建议复核来源';
     case 'unsupported-risk':
-      return '引用风险';
+      return '建议补充来源';
     case 'evidence-gap':
-      return '证据不足';
+      return '参考不足';
     case 'supported':
       return '有文献支撑';
     case 'needs-verification':
-      return '需补核验';
+      return '建议复核来源';
     case 'not-needed':
     case 'not-applicable':
-      return '无需核验';
+      return '无需补充来源';
     default:
-      return toPlainString(status) || '未核验';
+      return toPlainString(status) || '待确认';
   }
 }
 
@@ -206,7 +210,7 @@ function evidenceFacts(item: EvidenceItem) {
 
   if (venue) facts.push(venue);
   if (year) facts.push(year);
-  if (doi) facts.push(`DOI ${doi}`);
+  if (doi) facts.push(`可查来源 ${doi}`);
   if (chunkSourceLabel) {
     facts.push(chunkSourceLabel);
   } else if (chunkSourceKind) {
@@ -227,10 +231,10 @@ function buildEvidenceSummary(candidate: AgentRevisionResult | null) {
   const ragCount = strategy?.localRagEvidenceCount || 0;
   const doiCount = audit?.verifiedDoiEvidenceCount || 0;
 
-  if (totalEvidence > 0) parts.push(`本次改写参考了 ${totalEvidence} 条项目依据`);
+  if (totalEvidence > 0) parts.push(`本次改写参考了 ${totalEvidence} 条内容`);
   if (literatureCount > 0) parts.push(`其中 ${literatureCount} 条来自文献库`);
   if (ragCount > 0) parts.push(`${ragCount} 条来自已导入全文`);
-  if (doiCount > 0) parts.push(`${doiCount} 条带 DOI 核验`);
+  if (doiCount > 0) parts.push(`${doiCount} 条带可查来源`);
 
   return parts.join('，');
 }
@@ -270,7 +274,7 @@ function evidenceDisplaySubtitle(item: EvidenceItem) {
     parts.push(venue || year);
   }
   if (doi) {
-    parts.push(`DOI ${doi}`);
+    parts.push(`可查来源 ${doi}`);
   }
   return parts;
 }
@@ -300,7 +304,7 @@ function evidenceLocationLabel(item: EvidenceItem) {
 
   switch (item.sourceKind) {
     case 'literature':
-      return '文献库元数据';
+      return '文献库内容';
     case 'project-section':
       return '项目章节上下文';
     case 'reviewer-comment':
@@ -308,14 +312,14 @@ function evidenceLocationLabel(item: EvidenceItem) {
     case 'revision-memory':
       return '历史改稿记录';
     default:
-      return '项目内证据';
+      return '项目内参考';
   }
 }
 
 function evidenceStatLabel(item: EvidenceItem) {
   const confidence = toPlainString(item.metadata?.confidence);
-  if (confidence) return `置信度 ${confidence}`;
-  return `证据分 ${item.score.toFixed(1)}`;
+  if (confidence) return `匹配度 ${confidence}`;
+  return `相关度 ${item.score.toFixed(1)}`;
 }
 
 function EvidenceDisclosure({ item, open = false }: { item: EvidenceItem; open?: boolean }) {
@@ -339,18 +343,18 @@ function EvidenceDisclosure({ item, open = false }: { item: EvidenceItem; open?:
       <div className="evidence-disclosure__body">
         <div className="evidence-disclosure__meta">
           <div>
-            <span>证据位置</span>
+            <span>来源位置</span>
             <strong>{evidenceLocationLabel(item)}</strong>
           </div>
           {facts.length ? (
             <div>
-              <span>可核验信息</span>
+              <span>可查信息</span>
               <strong>{facts.slice(0, 3).join(' · ')}</strong>
             </div>
           ) : null}
         </div>
         <div className="evidence-disclosure__excerpt">
-          <span>证据摘录</span>
+          <span>参考摘录</span>
           <p>{item.excerpt}</p>
         </div>
       </div>
@@ -484,6 +488,7 @@ export const Editor: React.FC = () => {
 
   const [activeRightTab, setActiveRightTab] = useState<RightTab>('rewrite');
   const [activeCenterView, setActiveCenterView] = useState<CenterView>('review');
+  const [revisionMode, setRevisionMode] = useState<RevisionMode>('normal');
   const [workspaceText, setWorkspaceText] = useState('');
   const [workspaceCandidate, setWorkspaceCandidate] = useState<AgentRevisionResult | null>(null);
   const [candidateContext, setCandidateContext] = useState<{ actionType: string; commentId?: string | null } | null>(null);
@@ -652,6 +657,7 @@ export const Editor: React.FC = () => {
         title: activeSection ? `${bundle.project.title} / ${activeSection.title}` : bundle.project.title,
         text,
         actionType,
+        mode: revisionMode,
         note,
         commentId: options?.commentId ?? null,
         previousCandidateText: '',
@@ -682,6 +688,7 @@ export const Editor: React.FC = () => {
         title: bundle.project.title,
         text: workspaceCandidate.baseText || workspaceText,
         actionType: 'custom-instruction',
+        mode: revisionMode,
         note: feedback.trim(),
         commentId: candidateContext?.commentId ?? null,
         previousCandidateText: workspaceCandidate.text,
@@ -945,11 +952,8 @@ export const Editor: React.FC = () => {
                 {workspaceCandidate ? (
                   <div className="workspace-result-meta">
                     <span>{workspaceCandidate.summary}</span>
-                    <span>{workspaceCandidate.agentTrace?.executionLane === 'full' ? '深度链路' : '快速链路'}</span>
+                    <span>{revisionModeLabel(workspaceCandidate.revisionMode || revisionMode)}</span>
                     {evidenceSummary ? <span>{evidenceSummary}</span> : null}
-                    {workspaceCandidate.citationVerification?.status ? (
-                      <span>{citationStatusLabel(workspaceCandidate.citationVerification.status)}</span>
-                    ) : null}
                   </div>
                 ) : (
                   <p className="workspace-pane__hint">右侧会显示本轮候选改写。接受后会把结果回填到左侧输入框。</p>
@@ -1032,13 +1036,6 @@ export const Editor: React.FC = () => {
             >
               意见
             </button>
-            <button
-              type="button"
-              className={activeRightTab === 'trace' ? 'active' : ''}
-              onClick={() => setActiveRightTab('trace')}
-            >
-              轨迹
-            </button>
           </div>
 
           </div>
@@ -1050,6 +1047,27 @@ export const Editor: React.FC = () => {
                     <Sparkles size={18} />
                     标准动作
                   </h3>
+                  <div className="mode-switch" role="tablist" aria-label="改写模式">
+                    <button
+                      type="button"
+                      className={revisionMode === 'normal' ? 'is-active' : ''}
+                      onClick={() => setRevisionMode('normal')}
+                    >
+                      普通模式
+                    </button>
+                    <button
+                      type="button"
+                      className={revisionMode === 'pro' ? 'is-active' : ''}
+                      onClick={() => setRevisionMode('pro')}
+                    >
+                      深度模式
+                    </button>
+                  </div>
+                  <p className="mode-switch__hint">
+                    {revisionMode === 'pro'
+                      ? '适合需要更细致润色、改写力度更大的段落。'
+                      : '适合日常改写、快速润色和常规调整。'}
+                  </p>
                   <div className="action-grid">
                     {ACTIONS.map((action) => (
                       <button
@@ -1137,7 +1155,7 @@ export const Editor: React.FC = () => {
                       </div>
                       <div className="ref-trust-banner__text">
                         <strong>{citationStatusLabel(workspaceCandidate.citationVerification?.status)}</strong>
-                        <span>{workspaceCandidate.citationAudit?.recommendedAction || evidenceSummary || '系统已完成证据检索与核验。'}</span>
+                        <span>{workspaceCandidate.citationAudit?.recommendedAction || evidenceSummary || '已整理本轮参考内容。'}</span>
                       </div>
                     </div>
 
@@ -1145,7 +1163,7 @@ export const Editor: React.FC = () => {
                     <div className="ref-stats-row">
                       <div className="ref-stat">
                         <span className="ref-stat__num">{workspaceCandidate.evidence?.length || 0}</span>
-                        <span className="ref-stat__label">引用证据</span>
+                        <span className="ref-stat__label">参考条目</span>
                       </div>
                       <div className="ref-stat">
                         <span className="ref-stat__num">{workspaceCandidate.evidenceStrategy.retrievedLiteratureEvidenceCount}</span>
@@ -1153,11 +1171,11 @@ export const Editor: React.FC = () => {
                       </div>
                       <div className="ref-stat">
                         <span className="ref-stat__num">{workspaceCandidate.evidenceStrategy.localRagEvidenceCount}</span>
-                        <span className="ref-stat__label">全文索引</span>
+                        <span className="ref-stat__label">全文片段</span>
                       </div>
                       <div className="ref-stat">
                         <span className="ref-stat__num">{workspaceCandidate.citationAudit?.verifiedDoiEvidenceCount || 0}</span>
-                        <span className="ref-stat__label">DOI 核验</span>
+                        <span className="ref-stat__label">可查来源</span>
                       </div>
                     </div>
 
@@ -1196,7 +1214,7 @@ export const Editor: React.FC = () => {
                                       <strong>{evidenceKindLabel(item.sourceKind)}</strong>
                                     </div>
                                     <div className="ref-evidence-card__meta-item">
-                                      <span>证据位置</span>
+                                      <span>来源位置</span>
                                       <strong>{evidenceLocationLabel(item)}</strong>
                                     </div>
                                   </div>
@@ -1247,7 +1265,7 @@ export const Editor: React.FC = () => {
                                       <strong>{evidenceKindLabel(item.sourceKind)}</strong>
                                     </div>
                                     <div className="ref-evidence-card__meta-item">
-                                      <span>证据位置</span>
+                                      <span>来源位置</span>
                                       <strong>{evidenceLocationLabel(item)}</strong>
                                     </div>
                                   </div>
@@ -1264,7 +1282,7 @@ export const Editor: React.FC = () => {
                     )}
 
                     {rankedEvidence.length === 0 && (
-                      <div className="sidepanel-empty">本次改写没有命中项目内证据。可以先导入文献或补充 RAG 索引。</div>
+                      <div className="sidepanel-empty">本次改写暂时没有命中项目内参考。可以先导入文献或补充全文材料。</div>
                     )}
                   </>
                 ) : (
@@ -1307,35 +1325,6 @@ export const Editor: React.FC = () => {
               </Card>
             ) : null}
 
-            {activeRightTab === 'trace' ? (
-              <Card className="sidepanel-card">
-                <h3 className="sidepanel-card__title">
-                  <FileText size={18} />
-                  执行轨迹
-                </h3>
-                {workspaceCandidate?.agentTrace?.stepRuns?.length ? (
-                  <>
-                    <div className="trace-summary">
-                      <span>{workspaceCandidate.agentTrace.executionLane === 'full' ? '深度链路' : '快速链路'}</span>
-                      <span>{workspaceCandidate.agentTrace.effectiveActionType || workspaceCandidate.actionType}</span>
-                    </div>
-                    <div className="trace-list">
-                      {workspaceCandidate.agentTrace.stepRuns.map((step, index) => (
-                        <div key={`${step.step}-${index}`} className="trace-item">
-                          <div className="trace-item__top">
-                            <strong>{step.step}</strong>
-                            <span>{step.status}</span>
-                          </div>
-                          <div className="trace-item__bottom">{step.latency_ms} ms</div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <div className="sidepanel-empty">生成候选后，这里会显示本轮处理轨迹。</div>
-                )}
-              </Card>
-            ) : null}
           </div>
         </aside>
       </div>

@@ -511,7 +511,7 @@
 
 .sidepanel-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   border-top: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
   background: rgba(255, 255, 255, 0.96);
@@ -561,6 +561,41 @@
   gap: 8px;
   font-size: 1rem;
   font-weight: 700;
+}
+
+.mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.mode-switch button {
+  border: 1px solid rgba(109, 40, 217, 0.16);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-secondary);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  transition: all var(--transition-fast);
+}
+
+.mode-switch button:hover {
+  color: var(--text-primary);
+  border-color: rgba(109, 40, 217, 0.28);
+}
+
+.mode-switch button.is-active {
+  background: linear-gradient(135deg, rgba(109, 40, 217, 0.12), rgba(139, 92, 246, 0.18));
+  color: var(--primary-color);
+  border-color: rgba(109, 40, 217, 0.34);
+}
+
+.mode-switch__hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.6;
 }
 
 .action-grid {
