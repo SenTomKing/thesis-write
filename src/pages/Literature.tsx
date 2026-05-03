@@ -441,12 +441,12 @@ export const Literature: React.FC = () => {
       setError(null);
       await driver.complete(
         result.downloadedCount > 0
-          ? `Downloaded ${result.downloadedCount} full texts and refreshed the library`
-          : 'Batch full-text fetch finished'
+          ? `已获取 ${result.downloadedCount} 篇全文，并更新项目文献库。`
+          : '批量获取全文完成'
       );
     } catch (err: any) {
       driver.fail();
-      setError(err.message || 'Batch full-text fetch failed');
+      setError(err.message || '批量获取全文失败');
       setNotice(null);
     } finally {
       setLoadingKey(null);
