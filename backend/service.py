@@ -1717,8 +1717,22 @@ class BackendService:
         model_profile: str = "normal",
     ) -> tuple[Any | None, dict[str, Any]]:
         payload_text = json.dumps(input_payload, ensure_ascii=False, indent=2)
-        timeout_seconds = float(os.getenv("DRAFTREFINE_MODEL_TIMEOUT_SECONDS", "10"))
-        max_attempts = max(1, int(os.getenv("DRAFTREFINE_MODEL_MAX_RETRIES", "2")))
+        normalized_profile = "pro" if model_profile == "pro" else "normal"
+        timeout_seconds = float(
+            os.getenv(
+                "DRAFTREFINE_MODEL_TIMEOUT_SECONDS_PRO" if normalized_profile == "pro" else "DRAFTREFINE_MODEL_TIMEOUT_SECONDS_NORMAL",
+                os.getenv("DRAFTREFINE_MODEL_TIMEOUT_SECONDS", "18" if normalized_profile == "pro" else "10"),
+            )
+        )
+        max_attempts = max(
+            1,
+            int(
+                os.getenv(
+                    "DRAFTREFINE_MODEL_MAX_RETRIES_PRO" if normalized_profile == "pro" else "DRAFTREFINE_MODEL_MAX_RETRIES_NORMAL",
+                    os.getenv("DRAFTREFINE_MODEL_MAX_RETRIES", "1" if normalized_profile == "pro" else "2"),
+                )
+            ),
+        )
         retry_backoff_seconds = max(0.0, float(os.getenv("DRAFTREFINE_MODEL_RETRY_BACKOFF_SECONDS", "0.75")))
         max_tokens = 1800 if action_name in {"academic-rewrite", "expand", "comment-revision"} else 900
         attempt_logs: list[dict[str, Any]] = []
@@ -1747,6 +1761,21 @@ class BackendService:
                         },
                     ],
                 }
+                if candidate["provider"] == "deepseek":
+                    thinking_env_key = (
+                        "DRAFTREFINE_DEEPSEEK_PRO_THINKING"
+                        if normalized_profile == "pro"
+                        else "DRAFTREFINE_DEEPSEEK_THINKING"
+                    )
+                    thinking_value = os.getenv(
+                        thinking_env_key,
+                        os.getenv(
+                            "DEEPSEEK_PRO_THINKING" if normalized_profile == "pro" else "DEEPSEEK_THINKING",
+                            "disabled",
+                        ),
+                    ).strip().lower()
+                    body["thinking"] = {"type": "enabled" if thinking_value == "enabled" else "disabled"}
+                    body["response_format"] = {"type": "json_object"}
                 request = urllib.request.Request(
                     f"{candidate['base_url'].rstrip('/')}/chat/completions",
                     data=json.dumps(body).encode("utf-8"),
