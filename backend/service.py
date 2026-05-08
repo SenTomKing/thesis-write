@@ -2016,11 +2016,14 @@ class BackendService:
     ) -> tuple[Any | None, dict[str, Any]]:
         payload_text = json.dumps(input_payload, ensure_ascii=False, indent=2)
         normalized_profile = "pro" if model_profile == "pro" else "normal"
-        timeout_seconds = float(
-            os.getenv(
-                "DRAFTREFINE_MODEL_TIMEOUT_SECONDS_PRO" if normalized_profile == "pro" else "DRAFTREFINE_MODEL_TIMEOUT_SECONDS_NORMAL",
-                os.getenv("DRAFTREFINE_MODEL_TIMEOUT_SECONDS", "18" if normalized_profile == "pro" else "10"),
-            )
+        timeout_seconds = max(
+            float(
+                os.getenv(
+                    "DRAFTREFINE_MODEL_TIMEOUT_SECONDS_PRO" if normalized_profile == "pro" else "DRAFTREFINE_MODEL_TIMEOUT_SECONDS_NORMAL",
+                    os.getenv("DRAFTREFINE_MODEL_TIMEOUT_SECONDS", "18" if normalized_profile == "pro" else "10"),
+                )
+            ),
+            60.0,
         )
         max_attempts = max(
             1,
