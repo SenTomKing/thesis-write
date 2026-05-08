@@ -28,7 +28,6 @@ import {
 } from '../types';
 import './Literature.css';
 
-const API_ORIGIN = 'http://127.0.0.1:8000';
 const DEFAULT_SOURCES = ['openalex', 'crossref', 'semantic-scholar'];
 
 type ActiveView = 'library' | 'search';
@@ -170,7 +169,8 @@ function createOperationProgressDriver(
 function toAbsoluteUrl(url?: string) {
   if (!url) return '';
   if (/^https?:\/\//i.test(url)) return url;
-  return `${API_ORIGIN}${url}`;
+  if (typeof window === 'undefined') return url;
+  return new URL(url, window.location.origin).toString();
 }
 
 function formatAuthors(authors: string[]) {
