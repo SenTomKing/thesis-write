@@ -17,6 +17,10 @@ class BackendServiceTests(unittest.TestCase):
         self.workspace_tmp_root.mkdir(parents=True, exist_ok=True)
         self.database_path = self.workspace_tmp_root / f"draftrefine-test-{uuid4().hex}.sqlite3"
         os.environ.pop("DRAFTREFINE_DATABASE_PATH", None)
+        os.environ.pop("DRAFTREFINE_INVITE_CODE", None)
+        os.environ.pop("INVITE_CODE", None)
+        os.environ.pop("DRAFTREFINE_SESSION_DAYS", None)
+        os.environ["DRAFTREFINE_SKIP_DEMO_SEED"] = "1"
         os.environ["DRAFTREFINE_DEEPSEEK_API_KEY"] = ""
         os.environ["DRAFTREFINE_QWEN_API_KEY"] = ""
         self.service = BackendService(database_path=self.database_path)
@@ -31,6 +35,10 @@ class BackendServiceTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.provider_patcher.stop()
+        os.environ.pop("DRAFTREFINE_INVITE_CODE", None)
+        os.environ.pop("INVITE_CODE", None)
+        os.environ.pop("DRAFTREFINE_SESSION_DAYS", None)
+        os.environ.pop("DRAFTREFINE_SKIP_DEMO_SEED", None)
         if self.database_path.exists():
             self.database_path.unlink()
         storage_dir = self.workspace_tmp_root / f"{self.database_path.stem}_literature"
@@ -210,6 +218,73 @@ class BackendServiceTests(unittest.TestCase):
         self.assertGreaterEqual(len(bundle["sections"]), 3)
         self.assertEqual(len(bundle["issues"]), 0)
         self.assertEqual(bundle["project"]["status"], "ready")
+
+    def test_first_registered_user_claims_existing_projects(self) -> None:
+        self.service.create_project(
+            title="Legacy project",
+            doc_type="thesis",
+            language="en",
+            source_type="text",
+            note="Pre-auth legacy data",
+            text="Legacy text body.",
+        )
+        os.environ["DRAFTREFINE_INVITE_CODE"] = "invite-123"
+
+        user, session_token = self.service.register_user(
+            email="owner@example.com",
+            username="owner",
+            password="password-123",
+            invite_code="invite-123",
+        )
+
+        claimed = self.service.list_projects(owner_user_id=user["id"])
+        self.assertEqual(len(claimed), 1)
+        self.assertEqual(claimed[0]["title"], "Legacy project")
+        self.assertEqual(self.service.get_user_by_session(session_token)["email"], "owner@example.com")
+
+    def test_login_accepts_email_or_username(self) -> None:
+        os.environ["DRAFTREFINE_INVITE_CODE"] = "invite-123"
+        self.service.register_user(
+            email="member@example.com",
+            username="member",
+            password="password-123",
+            invite_code="invite-123",
+        )
+
+        by_email, _ = self.service.login_user(identifier="member@example.com", password="password-123")
+        by_username, _ = self.service.login_user(identifier="member", password="password-123")
+
+        self.assertEqual(by_email["id"], by_username["id"])
+        self.assertEqual(by_email["username"], "member")
+
+    def test_project_access_blocks_other_users(self) -> None:
+        os.environ["DRAFTREFINE_INVITE_CODE"] = "invite-123"
+        owner, _ = self.service.register_user(
+            email="owner@example.com",
+            username="owner",
+            password="password-123",
+            invite_code="invite-123",
+        )
+        other, _ = self.service.register_user(
+            email="other@example.com",
+            username="other",
+            password="password-123",
+            invite_code="invite-123",
+        )
+        bundle = self.service.create_project(
+            title="Private project",
+            doc_type="thesis",
+            language="en",
+            source_type="text",
+            note="Private body",
+            text="Only the owner should access this.",
+            owner_user_id=owner["id"],
+        )
+
+        accessible = self.service.ensure_project_access(bundle["project"]["id"], owner["id"])
+        self.assertEqual(accessible["projectId"], bundle["project"]["id"])
+        with self.assertRaises(KeyError):
+            self.service.ensure_project_access(bundle["project"]["id"], other["id"])
 
     def test_revision_accept_and_restore_flow(self) -> None:
         bundle = self.service.create_project(

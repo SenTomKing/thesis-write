@@ -133,6 +133,19 @@ export type RewriteProgress = {
 
 export type RevisionMode = 'normal' | 'pro';
 
+export type UserProfile = {
+  id: string;
+  email: string;
+  username: string;
+  createdAt: string;
+};
+
+export type AuthStatus = {
+  hasUsers: boolean;
+  registrationMode: 'invite-only' | string;
+  inviteConfigured: boolean;
+};
+
 export type RevisionCandidate = {
   id: string;
   projectId: string;

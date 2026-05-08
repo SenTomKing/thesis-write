@@ -77,6 +77,7 @@ interface AppState {
   rewriteProgress: RewriteProgress | null;
   loading: Record<string, boolean>;
   error: string | null;
+  resetWorkspace: () => void;
 
   fetchProjects: (scope?: 'active' | 'trash' | 'all') => Promise<void>;
   loadProject: (id: string) => Promise<void>;
@@ -114,6 +115,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
   setError: (error) => set({ error }),
+
+  resetWorkspace: () =>
+    set({
+      projects: [],
+      activeProjectId: null,
+      bundle: null,
+      activeSectionId: null,
+      candidate: null,
+      rewriteProgress: null,
+      loading: {},
+      error: null,
+    }),
 
   clearCandidate: () => set({ candidate: null, rewriteProgress: null }),
 

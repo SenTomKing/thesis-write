@@ -1,10 +1,18 @@
 import React from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
-import { FileText, FolderPlus, LayoutDashboard, Settings, Trash2 } from 'lucide-react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { FileText, FolderPlus, LayoutDashboard, LogOut, Trash2, UserRound } from 'lucide-react';
+import { useAuth } from '../auth/AuthContext';
 import './Layout.css';
+
+function initialsForUser(username: string) {
+  const trimmed = username.trim();
+  return trimmed ? trimmed.slice(0, 1).toUpperCase() : 'U';
+}
 
 export const Layout: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const navItems = [
     { path: '/', icon: <LayoutDashboard size={20} />, label: '工作台' },
@@ -36,10 +44,28 @@ export const Layout: React.FC = () => {
         </nav>
 
         <div className="sidebar-footer">
-          <button className="nav-item ghost" type="button">
-            <Settings size={20} />
-            <span>设置</span>
+          <div className="account-panel">
+            <div className="account-avatar">{initialsForUser(user?.username || '')}</div>
+            <div className="account-copy">
+              <strong>{user?.username || '未登录'}</strong>
+              <span>{user?.email || ''}</span>
+            </div>
+          </div>
+          <button
+            className="nav-item ghost"
+            type="button"
+            onClick={async () => {
+              await logout();
+              navigate('/auth', { replace: true });
+            }}
+          >
+            <LogOut size={20} />
+            <span>退出登录</span>
           </button>
+          <div className="account-note">
+            <UserRound size={14} />
+            <span>当前数据仅对本账号可见</span>
+          </div>
         </div>
       </aside>
 

@@ -13,6 +13,8 @@ import {
   CitationVerification,
   CitationAudit,
   SourceFilePreview,
+  UserProfile,
+  AuthStatus,
 } from '../types';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
@@ -39,7 +41,7 @@ async function fetchWithRetry(url: string, options: RequestInit, attempts = 2): 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       const signal = options.signal ?? (typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal ? AbortSignal.timeout(45000) : undefined);
-      return await fetch(url, { ...options, signal });
+      return await fetch(url, { ...options, signal, credentials: 'include' });
     } catch (error) {
       lastError = error;
       if (attempt < attempts) {
@@ -106,6 +108,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       errData = { detail: response.statusText };
     }
     errData = { ...errData, detail: humanizeDetail(errData?.detail || response.statusText) };
+    if (response.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('draftrefine:unauthorized'));
+    }
     throw new ApiError(response.status, errData);
   }
 
@@ -124,6 +129,7 @@ function uploadFileRequest<T>(
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url, true);
     xhr.timeout = timeoutMs;
+    xhr.withCredentials = true;
     xhr.setRequestHeader('Accept', 'application/json');
 
     xhr.upload.onprogress = (event) => {
@@ -173,6 +179,9 @@ function uploadFileRequest<T>(
           detail: humanizeDetail(payload?.detail || xhr.statusText || 'Server failed while handling the uploaded file.'),
         })
       );
+      if (xhr.status === 401 && typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('draftrefine:unauthorized'));
+      }
     };
 
     xhr.send(formData);
@@ -181,6 +190,16 @@ function uploadFileRequest<T>(
 
 export const api = {
   health: () => request<{status: string}>('/health'),
+
+  auth: {
+    status: () => request<AuthStatus>('/auth/status'),
+    me: () => request<{ user: UserProfile }>('/auth/me'),
+    register: (data: { email: string; username: string; password: string; inviteCode: string }) =>
+      request<{ user: UserProfile }>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+    login: (data: { identifier: string; password: string }) =>
+      request<{ user: UserProfile }>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+    logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
+  },
   
   projects: {
     list: (scope: 'active' | 'trash' | 'all' = 'active') => request<Project[]>(`/projects?scope=${scope}`),

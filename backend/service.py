@@ -1,11 +1,14 @@
 ﻿from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+import hmac
 import hashlib
 from contextlib import contextmanager
 import io
 import json
 import os
 import re
+import secrets
 import socket
 import shutil
 import sqlite3
@@ -87,9 +90,45 @@ class ModelInvocationError(RuntimeError):
 
 
 def utc_now() -> str:
-    from datetime import UTC, datetime
-
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
+
+
+def normalize_email(value: str) -> str:
+    return compact_text(value).lower()
+
+
+def normalize_username(value: str) -> str:
+    return compact_text(value).lower()
+
+
+def session_expiry_iso(days: int) -> str:
+    return (datetime.now(UTC) + timedelta(days=days)).isoformat().replace("+00:00", "Z")
+
+
+def hash_session_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def make_password_hash(password: str, iterations: int = 480000) -> str:
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), iterations)
+    return f"pbkdf2_sha256${iterations}${salt}${digest.hex()}"
+
+
+def verify_password_hash(password: str, encoded_hash: str) -> bool:
+    try:
+        algorithm, iterations_text, salt, digest = encoded_hash.split("$", 3)
+        if algorithm != "pbkdf2_sha256":
+            return False
+        recalculated = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            bytes.fromhex(salt),
+            int(iterations_text),
+        ).hex()
+        return hmac.compare_digest(recalculated, digest)
+    except (ValueError, TypeError):
+        return False
 
 
 def new_id(prefix: str) -> str:
@@ -1449,6 +1488,20 @@ class BackendService:
 
     def _init_db(self) -> None:
         schema = """
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          email TEXT NOT NULL UNIQUE,
+          username TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS sessions (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          token_hash TEXT NOT NULL UNIQUE,
+          created_at TEXT NOT NULL,
+          expires_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS projects (
           id TEXT PRIMARY KEY,
           title TEXT NOT NULL,
@@ -1632,6 +1685,7 @@ class BackendService:
                 "projects",
                 {
                     "deleted_at": "TEXT",
+                    "owner_user_id": "TEXT",
                 },
             )
             connection.commit()
@@ -1641,6 +1695,250 @@ class BackendService:
         for name, definition in columns.items():
             if name not in existing:
                 connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+
+    def _serialize_user(self, row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "email": row["email"],
+            "username": row["username"],
+            "createdAt": row["created_at"],
+        }
+
+    def auth_status(self) -> dict[str, Any]:
+        with self._connect() as connection:
+            user_count = int(connection.execute("SELECT COUNT(*) FROM users").fetchone()[0])
+        return {
+            "hasUsers": user_count > 0,
+            "registrationMode": "invite-only",
+            "inviteConfigured": bool((os.getenv("DRAFTREFINE_INVITE_CODE") or os.getenv("INVITE_CODE") or "").strip()),
+        }
+
+    def _configured_invite_code(self) -> str:
+        return (os.getenv("DRAFTREFINE_INVITE_CODE") or os.getenv("INVITE_CODE") or "").strip()
+
+    def _session_days(self) -> int:
+        return max(1, int((os.getenv("DRAFTREFINE_SESSION_DAYS") or "30").strip() or "30"))
+
+    def _create_session(self, connection: sqlite3.Connection, user_id: str) -> str:
+        token = secrets.token_urlsafe(32)
+        connection.execute(
+            """
+            INSERT INTO sessions (id, user_id, token_hash, created_at, expires_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                new_id("session"),
+                user_id,
+                hash_session_token(token),
+                utc_now(),
+                session_expiry_iso(self._session_days()),
+            ),
+        )
+        return token
+
+    def _claim_unowned_projects(self, connection: sqlite3.Connection, user_id: str) -> None:
+        connection.execute(
+            "UPDATE projects SET owner_user_id = ? WHERE owner_user_id IS NULL",
+            (user_id,),
+        )
+
+    def register_user(self, *, email: str, username: str, password: str, invite_code: str) -> tuple[dict[str, Any], str]:
+        normalized_email = normalize_email(email)
+        normalized_username = normalize_username(username)
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized_email):
+            raise ValueError("请输入有效邮箱。")
+        if not re.fullmatch(r"[a-z0-9_-]{3,32}", normalized_username):
+            raise ValueError("用户名需为 3-32 位字母、数字、下划线或短横线。")
+        if len(password) < 8:
+            raise ValueError("密码至少需要 8 位。")
+        configured_invite_code = self._configured_invite_code()
+        if configured_invite_code and invite_code.strip() != configured_invite_code:
+            raise ValueError("邀请码不正确。")
+        if not configured_invite_code:
+            raise ValueError("当前未配置邀请码，暂时无法注册。")
+
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT id FROM users WHERE email = ? OR username = ?",
+                (normalized_email, normalized_username),
+            ).fetchone()
+            if existing is not None:
+                raise ValueError("邮箱或用户名已被使用。")
+            user_id = new_id("user")
+            now = utc_now()
+            first_user = int(connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]) == 0
+            connection.execute(
+                """
+                INSERT INTO users (id, email, username, password_hash, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (user_id, normalized_email, normalized_username, make_password_hash(password), now),
+            )
+            if first_user:
+                self._claim_unowned_projects(connection, user_id)
+            token = self._create_session(connection, user_id)
+            user = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+            connection.commit()
+        return self._serialize_user(user), token
+
+    def login_user(self, *, identifier: str, password: str) -> tuple[dict[str, Any], str]:
+        normalized_identifier = normalize_email(identifier)
+        with self._connect() as connection:
+            self._cleanup_expired_sessions(connection)
+            user = connection.execute(
+                "SELECT * FROM users WHERE email = ? OR username = ?",
+                (normalized_identifier, normalize_username(identifier)),
+            ).fetchone()
+            if user is None or not verify_password_hash(password, user["password_hash"]):
+                raise ValueError("账号或密码不正确。")
+            token = self._create_session(connection, user["id"])
+            connection.commit()
+        return self._serialize_user(user), token
+
+    def _cleanup_expired_sessions(self, connection: sqlite3.Connection) -> None:
+        connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (utc_now(),))
+
+    def get_user_by_session(self, session_token: str | None) -> dict[str, Any] | None:
+        if not session_token:
+            return None
+        with self._connect() as connection:
+            self._cleanup_expired_sessions(connection)
+            row = connection.execute(
+                """
+                SELECT u.*
+                FROM sessions s
+                JOIN users u ON u.id = s.user_id
+                WHERE s.token_hash = ? AND s.expires_at > ?
+                """,
+                (hash_session_token(session_token), utc_now()),
+            ).fetchone()
+            connection.commit()
+        if row is None:
+            return None
+        return self._serialize_user(row)
+
+    def delete_session(self, session_token: str | None) -> None:
+        if not session_token:
+            return
+        with self._connect() as connection:
+            connection.execute("DELETE FROM sessions WHERE token_hash = ?", (hash_session_token(session_token),))
+            connection.commit()
+
+    def ensure_project_access(self, project_id: str, user_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT id, owner_user_id FROM projects WHERE id = ? AND owner_user_id = ?",
+                (project_id, user_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(project_id)
+        return {"projectId": row["id"]}
+
+    def ensure_source_file_access(self, file_id: str, user_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT sf.id, sf.project_id
+                FROM source_files sf
+                JOIN projects p ON p.id = sf.project_id
+                WHERE sf.id = ? AND p.owner_user_id = ?
+                """,
+                (file_id, user_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(file_id)
+        return {"fileId": row["id"], "projectId": row["project_id"]}
+
+    def ensure_section_access(self, section_id: str, user_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT s.id, s.project_id
+                FROM sections s
+                JOIN projects p ON p.id = s.project_id
+                WHERE s.id = ? AND p.owner_user_id = ?
+                """,
+                (section_id, user_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(section_id)
+        return {"sectionId": row["id"], "projectId": row["project_id"]}
+
+    def ensure_comment_access(self, comment_id: str, user_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT c.id, c.project_id
+                FROM reviewer_comments c
+                JOIN projects p ON p.id = c.project_id
+                WHERE c.id = ? AND p.owner_user_id = ?
+                """,
+                (comment_id, user_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(comment_id)
+        return {"commentId": row["id"], "projectId": row["project_id"]}
+
+    def ensure_issue_access(self, issue_id: str, user_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT i.id, i.project_id
+                FROM issues i
+                JOIN projects p ON p.id = i.project_id
+                WHERE i.id = ? AND p.owner_user_id = ?
+                """,
+                (issue_id, user_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(issue_id)
+        return {"issueId": row["id"], "projectId": row["project_id"]}
+
+    def ensure_job_access(self, job_id: str, user_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT j.id, j.project_id
+                FROM jobs j
+                JOIN projects p ON p.id = j.project_id
+                WHERE j.id = ? AND p.owner_user_id = ?
+                """,
+                (job_id, user_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(job_id)
+        return {"jobId": row["id"], "projectId": row["project_id"]}
+
+    def ensure_revision_candidate_access(self, candidate_id: str, user_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT rc.id, COALESCE(rc.project_id, s.project_id) AS project_id
+                FROM revision_candidates rc
+                LEFT JOIN sections s ON s.id = rc.section_id
+                JOIN projects p ON p.id = COALESCE(rc.project_id, s.project_id)
+                WHERE rc.id = ? AND p.owner_user_id = ?
+                """,
+                (candidate_id, user_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(candidate_id)
+        return {"candidateId": row["id"], "projectId": row["project_id"]}
+
+    def ensure_revision_access(self, revision_id: str, user_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT r.id, r.project_id
+                FROM revision_events r
+                JOIN projects p ON p.id = r.project_id
+                WHERE r.id = ? AND p.owner_user_id = ?
+                """,
+                (revision_id, user_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError(revision_id)
+        return {"revisionId": row["id"], "projectId": row["project_id"]}
 
     def _prompt_path(self, category: str, language: str, action_name: str | None = None) -> Path:
         candidates: list[Path] = []
@@ -2862,23 +3160,27 @@ class BackendService:
                 self._refresh_project_state(connection, project_id)
             connection.commit()
 
-    def list_projects(self, scope: str = "active") -> list[dict[str, Any]]:
+    def list_projects(self, scope: str = "active", owner_user_id: str | None = None) -> list[dict[str, Any]]:
         with self._connect() as connection:
             if scope not in {"active", "trash", "all"}:
                 scope = "active"
-            where = {
-                "active": "WHERE deleted_at IS NULL",
-                "trash": "WHERE deleted_at IS NOT NULL",
-                "all": "",
-            }[scope]
+            where_clauses: list[str] = []
+            if scope == "active":
+                where_clauses.append("deleted_at IS NULL")
+            elif scope == "trash":
+                where_clauses.append("deleted_at IS NOT NULL")
+            if owner_user_id:
+                where_clauses.append("owner_user_id = ?")
+            where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
             order_clause = "ORDER BY COALESCE(deleted_at, updated_at) DESC, updated_at DESC"
+            params: tuple[Any, ...] = (owner_user_id,) if owner_user_id else ()
             project_ids = [
                 row["id"]
-                for row in connection.execute(f"SELECT id FROM projects {where} {order_clause}").fetchall()
+                for row in connection.execute(f"SELECT id FROM projects {where} {order_clause}", params).fetchall()
             ]
             for project_id in project_ids:
                 self._refresh_project_state(connection, project_id)
-            rows = connection.execute(f"SELECT * FROM projects {where} {order_clause}").fetchall()
+            rows = connection.execute(f"SELECT * FROM projects {where} {order_clause}", params).fetchall()
             connection.commit()
             return [self._serialize_project(row) for row in rows]
 
@@ -3354,7 +3656,17 @@ class BackendService:
             parse_confidence = 0.52 if parsed_text else 0.0
         return parsed_text, parse_confidence, parse_error
 
-    def create_project(self, *, title: str, doc_type: str, language: str, source_type: str, note: str, text: str) -> dict[str, Any]:
+    def create_project(
+        self,
+        *,
+        title: str,
+        doc_type: str,
+        language: str,
+        source_type: str,
+        note: str,
+        text: str,
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
         project_id = new_id("project")
         now = utc_now()
         with self._connect() as connection:
@@ -3363,8 +3675,8 @@ class BackendService:
                 INSERT INTO projects (
                   id, title, type, language, source_type, status, progress_state, next_action,
                   overview, created_at, updated_at, file_id, last_job_id, issue_count,
-                  unresolved_comment_count, pending_revision_count
-                ) VALUES (?, ?, ?, ?, ?, 'uploaded', 'editing', ?, ?, ?, ?, NULL, NULL, 0, 0, 0)
+                  unresolved_comment_count, pending_revision_count, owner_user_id
+                ) VALUES (?, ?, ?, ?, ?, 'uploaded', 'editing', ?, ?, ?, ?, NULL, NULL, 0, 0, 0, ?)
                 """,
                 (project_id, title.strip(), doc_type, language, source_type if source_type in {"demo", "text", "file"} else "text", "先上传草稿或粘贴正文。" if language == "zh" else "Upload a draft or paste source text first.", note.strip() or ("新项目已创建，等待解析与编辑。" if language == "zh" else "New project created and waiting for parsing."), now, now),
             )
@@ -3380,6 +3692,53 @@ class BackendService:
             self._finish_job(connection, job_id, "completed", "文本解析完成。")
             self._refresh_project_state(connection, project_id)
             connection.commit()
+        return self.get_project_bundle(project_id)
+
+    def create_project(
+        self,
+        *,
+        title: str,
+        doc_type: str,
+        language: str,
+        source_type: str,
+        note: str,
+        text: str,
+        owner_user_id: str | None = None,
+    ) -> dict[str, Any]:
+        project_id = new_id("project")
+        now = utc_now()
+        normalized_source_type = source_type if source_type in {"demo", "text", "file"} else "text"
+        next_action = "先上传草稿或粘贴正文。" if language == "zh" else "Upload a draft or paste source text first."
+        overview = note.strip() or ("新项目已创建，等待解析与编辑。" if language == "zh" else "New project created and waiting for parsing.")
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO projects (
+                  id, title, type, language, source_type, status, progress_state, next_action,
+                  overview, created_at, updated_at, file_id, last_job_id, issue_count,
+                  unresolved_comment_count, pending_revision_count, owner_user_id
+                ) VALUES (?, ?, ?, ?, ?, 'uploaded', 'editing', ?, ?, ?, ?, NULL, NULL, 0, 0, 0, ?)
+                """,
+                (
+                    project_id,
+                    title.strip(),
+                    doc_type,
+                    language,
+                    normalized_source_type,
+                    next_action,
+                    overview,
+                    now,
+                    now,
+                    owner_user_id,
+                ),
+            )
+            connection.commit()
+        if text.strip():
+            self.ingest_plain_text(
+                project_id=project_id,
+                text=text,
+                source_label="粘贴文本" if language == "zh" else "Pasted text",
+            )
         return self.get_project_bundle(project_id)
 
     def upload_file(self, *, project_id: str, file_name: str, content_type: str, raw_bytes: bytes, fallback_text: str) -> dict[str, Any]:

@@ -6,7 +6,6 @@
   background-color: var(--bg-main);
 }
 
-/* ── Sidebar ── Brand gradient + frost glass ── */
 .sidebar {
   width: 260px;
   background: linear-gradient(
@@ -77,6 +76,7 @@
   text-align: left;
   cursor: pointer;
   position: relative;
+  text-decoration: none;
 }
 
 .nav-item:hover {
@@ -84,7 +84,6 @@
   color: var(--text-primary);
 }
 
-/* ── Active: left accent bar (Linear-style) ── */
 .nav-item.active {
   background-color: var(--primary-light);
   color: var(--primary-color);
@@ -106,9 +105,63 @@
 .sidebar-footer {
   padding: 16px 14px;
   border-top: 1px solid rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-/* ── Main Content ── */
+.account-panel {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(124, 58, 237, 0.06);
+  border: 1px solid rgba(124, 58, 237, 0.1);
+}
+
+.account-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #fff;
+  background: var(--gradient-primary);
+  box-shadow: 0 12px 24px rgba(124, 58, 237, 0.18);
+}
+
+.account-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.account-copy strong {
+  color: var(--text-primary);
+  font-size: 0.93rem;
+}
+
+.account-copy span {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  padding: 0 4px;
+}
+
 .main-content {
   flex: 1;
   display: flex;
@@ -116,9 +169,10 @@
   overflow-y: auto;
   position: relative;
   background-image: var(--gradient-page);
+  min-width: 0;
+  min-height: 0;
 }
 
-/* ── Page Header ── Compact & clean ── */
 .page-header {
   padding: 28px 40px;
   background-color: rgba(255, 255, 255, 0.85);
