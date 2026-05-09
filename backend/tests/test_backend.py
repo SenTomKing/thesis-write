@@ -99,6 +99,20 @@ class BackendServiceTests(unittest.TestCase):
             prefix = "因此，" if language == "zh" else "Therefore, "
             rewritten = f"{prefix}{rewritten[:1].lower() + rewritten[1:]}" if rewritten else rewritten
 
+        elif action_name == "translate-en-zh":
+            rewritten = "基于这些考虑，本研究提出了一种双通道 SW-TES 方法。"
+        elif action_name == "translate-zh-en":
+            rewritten = "To address these concerns, this study proposes a two-channel SW-TES method."
+        elif action_name == "reduce-aigc":
+            if language == "zh":
+                rewritten = rewritten.replace("此外", "同时").replace("总之", "综合来看")
+                if rewritten == target_text:
+                    rewritten = f"换句话说，{rewritten}"
+            else:
+                rewritten = rewritten.replace("Moreover", "At the same time").replace("Overall", "Taken together")
+                if rewritten == target_text:
+                    rewritten = f"In practice, {rewritten}"
+
         return rewritten
 
     def _fake_call_provider_json(
@@ -163,6 +177,12 @@ class BackendServiceTests(unittest.TestCase):
                 canonical_action = "unify-terms"
             elif any(token in user_request for token in ["过渡", "衔接"]) or "transition" in lowered:
                 canonical_action = "transition-polish"
+            elif any(token in user_request for token in ["英转中", "翻译成中文", "译成中文"]) or "translate to chinese" in lowered:
+                canonical_action = "translate-en-zh"
+            elif any(token in user_request for token in ["中转英", "翻译成英文", "译成英文"]) or "translate to english" in lowered:
+                canonical_action = "translate-zh-en"
+            elif any(token in user_request for token in ["aigc", "模板感", "机器感"]) or "humanize" in lowered:
+                canonical_action = "reduce-aigc"
             else:
                 canonical_action = "academic-rewrite"
             lane = "full" if canonical_action in {"academic-rewrite", "expand", "comment-revision"} else "fast"
@@ -689,6 +709,35 @@ class BackendServiceTests(unittest.TestCase):
         self.assertEqual(normal["revisionMode"], "normal")
         self.assertEqual(pro["revisionMode"], "pro")
 
+    def test_translation_actions_allow_language_shift_and_use_action_prompts(self) -> None:
+        zh_result = self.service.revise_text(
+            text="Driven by these concerns, this study proposes a two-channel SW-TES method.",
+            action_type="translate-en-zh",
+            note="Translate the paragraph into Chinese.",
+        )
+        en_result = self.service.revise_text(
+            text="基于这些考虑，本研究提出了一种双通道 SW-TES 方法。",
+            action_type="translate-zh-en",
+            note="Translate the paragraph into English.",
+        )
+
+        self.assertIn("本研究提出了一种双通道", zh_result["text"])
+        self.assertIn("this study proposes", en_result["text"].lower())
+        zh_call = next(call for call in self.provider_calls if str(call["prompt_version"]).startswith("rewrite/translate-en-zh"))
+        en_call = next(call for call in self.provider_calls if str(call["prompt_version"]).startswith("rewrite/translate-zh-en"))
+        self.assertEqual(zh_call["input_payload"]["language"], "en")
+        self.assertEqual(en_call["input_payload"]["language"], "zh")
+
+    def test_reduce_aigc_action_uses_action_specific_prompt(self) -> None:
+        result = self.service.revise_text(
+            text="Overall, this section presents the main idea in a relatively standard way.",
+            action_type="reduce-aigc",
+            note="Make the wording less formulaic.",
+        )
+
+        self.assertIn(result["actionType"], {"reduce-aigc"})
+        self.assertTrue(any(str(call["prompt_version"]).startswith("rewrite/reduce-aigc") for call in self.provider_calls))
+
     def test_local_hybrid_rag_indexes_and_feeds_revision_agent(self) -> None:
         bundle = self.service.create_project(
             title="LST revision project",
@@ -904,9 +953,13 @@ class BackendServiceTests(unittest.TestCase):
 
     def test_action_specific_prompt_registry_lookup(self) -> None:
         action_prompt = self.service._load_prompt("rewrite", "zh", "academic-rewrite")
+        translation_prompt = self.service._load_prompt("rewrite", "en", "translate-en-zh")
+        de_template_prompt = self.service._load_prompt("rewrite", "zh", "reduce-aigc")
         fallback_prompt = self.service._load_prompt("rewrite", "zh", "unknown-action")
 
         self.assertIn("rewrite/academic-rewrite.zh@", action_prompt["version_tag"])
+        self.assertIn("rewrite/translate-en-zh.en@", translation_prompt["version_tag"])
+        self.assertIn("rewrite/reduce-aigc.zh@", de_template_prompt["version_tag"])
         self.assertIn("schema_hint", action_prompt)
         self.assertIn("rewrite/default.zh@", fallback_prompt["version_tag"])
 

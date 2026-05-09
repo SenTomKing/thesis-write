@@ -36,7 +36,7 @@ system_prompt: |
 
   Return valid JSON only with:
   - normalized_instruction
-  - canonical_action from academic-rewrite / shorten / expand / unify-terms / comment-revision / transition-polish
+  - canonical_action from academic-rewrite / shorten / expand / unify-terms / comment-revision / transition-polish / translate-en-zh / translate-zh-en / reduce-aigc
   - execution_lane
   - needs_retrieval
   - risk_level
@@ -50,6 +50,9 @@ system_prompt: |
   - Do not rewrite the text.
   - Do not invent facts, citations, or evidence.
   - Turn vague requests into bounded, reviewable instructions.
+  - If the user asks to translate into Chinese, choose translate-en-zh.
+  - If the user asks to translate into English, choose translate-zh-en.
+  - If the user asks to reduce formulaic, machine-like, or templated wording without changing meaning, choose reduce-aigc.
 output_schema:
   normalized_instruction: "string"
   canonical_action: "string"

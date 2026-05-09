@@ -34,6 +34,9 @@ type ActionConfig = {
 };
 
 const ACTIONS: ActionConfig[] = [
+  { type: 'translate-en-zh', label: '英转中', desc: '把英文段落改成自然准确的中文。' },
+  { type: 'translate-zh-en', label: '中转英', desc: '把中文段落改成自然准确的英文。' },
+  { type: 'reduce-aigc', label: '降低AIGC感', desc: '减少模板化表达，让语气更自然。' },
   { type: 'academic-rewrite', label: '学术化改写', desc: '提升语气与表达规范。' },
   { type: 'shorten', label: '精简表达', desc: '压缩重复内容，保留核心信息。' },
   { type: 'expand', label: '扩展论述', desc: '补足必要说明与论证。' },
@@ -41,7 +44,14 @@ const ACTIONS: ActionConfig[] = [
   { type: 'unify-terms', label: '统一术语', desc: '减少术语漂移与口径不一。' },
 ];
 
-const FAST_ACTIONS = new Set(['shorten', 'transition-polish', 'unify-terms']);
+const FAST_ACTIONS = new Set([
+  'shorten',
+  'transition-polish',
+  'unify-terms',
+  'translate-en-zh',
+  'translate-zh-en',
+  'reduce-aigc',
+]);
 
 const PROGRESS_PHASES: Record<'fast' | 'full', Array<{ label: string; ratio: number }>> = {
   fast: [

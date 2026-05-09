@@ -219,13 +219,21 @@ class RevisionGraph:
     def _effective_action_type(self) -> str:
         return self.state.effective_action_type or self.state.action_type
 
+    def _translation_target_language(self, action_type: str | None = None) -> str | None:
+        effective_action = action_type or self._effective_action_type()
+        if effective_action == "translate-en-zh":
+            return "zh"
+        if effective_action == "translate-zh-en":
+            return "en"
+        return None
+
     def _lane_for_action(self, action_type: str) -> str:
         return "full" if action_type in {"academic-rewrite", "expand", "comment-revision", "custom-instruction"} else "fast"
 
     def _risk_for_action(self, action_type: str) -> str:
         if action_type in {"expand", "comment-revision"}:
             return "high"
-        if action_type in {"academic-rewrite", "unify-terms", "custom-instruction"}:
+        if action_type in {"academic-rewrite", "unify-terms", "custom-instruction", "reduce-aigc", "translate-en-zh", "translate-zh-en"}:
             return "medium"
         return "low"
 
@@ -342,6 +350,9 @@ class RevisionGraph:
             "unify-terms",
             "comment-revision",
             "transition-polish",
+            "translate-en-zh",
+            "translate-zh-en",
+            "reduce-aigc",
         }
         if not normalized_instruction or canonical_action not in allowed_actions or not writer_brief:
             reject("Intent planner returned an incomplete custom-instruction plan.", model_output)
@@ -508,6 +519,9 @@ class RevisionGraph:
             "unify-terms": "Unify terminology",
             "comment-revision": "Revise for comment",
             "transition-polish": "Polish transition",
+            "translate-en-zh": "Translate into Chinese",
+            "translate-zh-en": "Translate into English",
+            "reduce-aigc": "Reduce formulaic tone",
             "custom-instruction": "Follow custom revision request",
         }
         if self.state.action_type == "custom-instruction":
@@ -741,14 +755,18 @@ class RevisionGraph:
         normalized_candidate = normalize_text_block(candidate_text)
         effective_action = self._effective_action_type()
         source_language = detect_text_language(normalized_source, fallback=self.state.language)
-        candidate_language = detect_text_language(normalized_candidate, fallback=source_language)
+        target_language = self._translation_target_language(effective_action)
+        candidate_language = detect_text_language(normalized_candidate, fallback=target_language or source_language)
         if not normalized_candidate:
             return "Writer returned empty text."
-        if source_language != candidate_language:
+        if target_language:
+            if candidate_language != target_language:
+                return "Writer did not produce the requested target language."
+        elif source_language != candidate_language:
             return "Writer changed the language of the source text."
         if re.search(r"placeholder|xxx|todo", normalized_candidate, re.I):
             return "Writer returned placeholder content."
-        if effective_action != "expand" and len(normalized_source) < 200 and chinese_overlap_ratio(normalized_source, normalized_candidate) < 0.18:
+        if not target_language and effective_action != "expand" and len(normalized_source) < 200 and chinese_overlap_ratio(normalized_source, normalized_candidate) < 0.18:
             return "Writer drifted too far from the source meaning."
         if effective_action != "expand" and len(normalized_candidate) > max(160, len(normalized_source) * 3):
             return "Writer expanded the text beyond the allowed revision range."
@@ -784,11 +802,15 @@ class RevisionGraph:
         issues: list[str] = []
         warnings: list[str] = []
         source_language = detect_text_language(original, fallback=self.state.language)
-        candidate_language = detect_text_language(candidate, fallback=source_language)
+        target_language = self._translation_target_language(effective_action)
+        candidate_language = detect_text_language(candidate, fallback=target_language or source_language)
 
-        if source_language != candidate_language:
+        if target_language:
+            if candidate_language != target_language:
+                issues.append("candidate_translation_language_mismatch")
+        elif source_language != candidate_language:
             issues.append("candidate_language_drift")
-        if effective_action != "expand" and len(original) < 240 and chinese_overlap_ratio(original, candidate) < 0.18:
+        if not target_language and effective_action != "expand" and len(original) < 240 and chinese_overlap_ratio(original, candidate) < 0.18:
             issues.append("candidate_meaning_drift")
         if effective_action != "expand" and len(candidate) > max(180, len(original) * 2.4):
             issues.append("candidate_over_expansion")

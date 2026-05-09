@@ -1359,6 +1359,9 @@ def rewrite_summary(action_type: str, language: str) -> str:
         "unify-terms": "统一高频术语，减少表达漂移。",
         "comment-revision": "按导师意见重写当前章节关键句。",
         "transition-polish": "补强段间过渡，减少跳跃感。",
+        "translate-en-zh": "将英文段落准确转成中文表达。",
+        "translate-zh-en": "将中文段落准确转成英文表达。",
+        "reduce-aigc": "减少模板化措辞，让语气更自然。",
     }
     en = {
         "academic-rewrite": "Tightened the academic tone and reduced informal phrasing.",
@@ -1367,6 +1370,9 @@ def rewrite_summary(action_type: str, language: str) -> str:
         "unify-terms": "Normalized key terminology across the section.",
         "comment-revision": "Revised the section to address reviewer feedback directly.",
         "transition-polish": "Inserted a transition so the section flows more clearly.",
+        "translate-en-zh": "Translated the English passage into natural Chinese.",
+        "translate-zh-en": "Translated the Chinese passage into natural English.",
+        "reduce-aigc": "Reduced formulaic wording and made the passage read more naturally.",
     }
     table = zh if language == "zh" else en
     return table.get(action_type, table["academic-rewrite"])
@@ -1380,6 +1386,9 @@ def heuristic_rewrite(action_type: str, text: str, comment_context: str, languag
         "unify-terms": unify_terms,
         "comment-revision": lambda current: revise_by_comment(current, comment_context),
         "transition-polish": polish_transitions,
+        "translate-en-zh": lambda current: current,
+        "translate-zh-en": lambda current: current,
+        "reduce-aigc": academic_rewrite,
     }
     rewritten = strategies.get(action_type, academic_rewrite)(text)
     warnings: list[str] = []
@@ -2522,9 +2531,9 @@ class BackendService:
         else:
             source_order.append("google-scholar-manual-fallback")
 
-        if action_type in {"shorten", "transition-polish"}:
+        if action_type in {"shorten", "transition-polish", "translate-en-zh", "translate-zh-en", "reduce-aigc"}:
             mode = "local-only"
-            reason = "当前动作以语言压缩和衔接优化为主，不应默认联网补证据。"
+            reason = "当前动作以语言处理和表达整理为主，不应默认联网补证据。"
         elif imported_literature_count > 0:
             mode = "library-first"
             reason = "优先使用项目文献库，只有证据不足时才建议人工补检。"
