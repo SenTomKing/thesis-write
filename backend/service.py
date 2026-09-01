@@ -1822,12 +1822,18 @@ class BackendService:
         if not secrets.compare_digest(recovery_code.strip(), configured_code):
             raise ValueError("恢复信息不正确。")
 
-        normalized_identifier = normalize_email(identifier)
         with self._connect() as connection:
-            user = connection.execute(
-                "SELECT * FROM users WHERE email = ? OR username = ?",
-                (normalized_identifier, normalize_username(identifier)),
-            ).fetchone()
+            normalized_identifier = identifier.strip()
+            if normalized_identifier:
+                user = connection.execute(
+                    "SELECT * FROM users WHERE email = ? OR username = ?",
+                    (normalize_email(normalized_identifier), normalize_username(normalized_identifier)),
+                ).fetchone()
+            else:
+                users = connection.execute("SELECT * FROM users ORDER BY created_at ASC LIMIT 2").fetchall()
+                if len(users) != 1:
+                    raise ValueError("站点中存在多个账号，请填写原邮箱或用户名。")
+                user = users[0]
             if user is None:
                 raise ValueError("恢复信息不正确。")
             connection.execute(

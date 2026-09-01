@@ -86,8 +86,8 @@ export const AuthPage: React.FC = () => {
 
   const handleRecovery = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (recoveryForm.identifier.trim().length < 3) {
-      setError('请输入邮箱或用户名。');
+    if (recoveryForm.identifier.trim() && recoveryForm.identifier.trim().length < 3) {
+      setError('邮箱或用户名至少需要 3 个字符。');
       return;
     }
     if (recoveryForm.newPassword.trim().length < 8) {
@@ -146,7 +146,7 @@ export const AuthPage: React.FC = () => {
         {activeTab === 'recover' ? (
           <form className="auth-form" onSubmit={handleRecovery}>
             <label className="auth-field">
-              <span>邮箱或用户名</span>
+              <span>邮箱或用户名（仅一个账号时可留空）</span>
               <div className="auth-input">
                 <UserRound size={18} />
                 <input
@@ -154,10 +154,8 @@ export const AuthPage: React.FC = () => {
                   onChange={(event) =>
                     setRecoveryForm((current) => ({ ...current, identifier: event.target.value }))
                   }
-                  placeholder="输入邮箱或用户名"
+                  placeholder="单账号站点可留空"
                   autoComplete="username"
-                  minLength={3}
-                  required
                 />
               </div>
             </label>

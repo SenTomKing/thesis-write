@@ -30,7 +30,7 @@ class AuthLoginRequest(BaseModel):
 
 
 class AuthRecoveryRequest(BaseModel):
-    identifier: str = Field(min_length=3)
+    identifier: str = ""
     newPassword: str = Field(min_length=8)
     recoveryCode: str = Field(min_length=12)
 

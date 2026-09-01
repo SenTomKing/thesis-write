@@ -289,7 +289,7 @@ class BackendServiceTests(unittest.TestCase):
         )
 
         recovered_user, new_session = self.service.recover_user_password(
-            identifier="owner@example.com",
+            identifier="",
             new_password="new-password-456",
             recovery_code="recover-this-owner-account",
         )
