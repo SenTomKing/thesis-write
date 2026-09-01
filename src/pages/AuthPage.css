@@ -147,6 +147,23 @@
   box-shadow: none;
 }
 
+.auth-recovery-link {
+  align-self: center;
+  margin-top: 2px;
+  border: 0;
+  padding: 6px 10px;
+  color: var(--primary-color);
+  background: transparent;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-recovery-link:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 640px) {
   .auth-card {
     padding: 24px 20px;

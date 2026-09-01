@@ -19,6 +19,7 @@ class BackendServiceTests(unittest.TestCase):
         os.environ.pop("DRAFTREFINE_DATABASE_PATH", None)
         os.environ.pop("DRAFTREFINE_INVITE_CODE", None)
         os.environ.pop("INVITE_CODE", None)
+        os.environ.pop("DRAFTREFINE_ACCOUNT_RECOVERY_CODE", None)
         os.environ.pop("DRAFTREFINE_SESSION_DAYS", None)
         os.environ["DRAFTREFINE_SKIP_DEMO_SEED"] = "1"
         os.environ["DRAFTREFINE_DEEPSEEK_API_KEY"] = ""
@@ -276,6 +277,30 @@ class BackendServiceTests(unittest.TestCase):
 
         self.assertEqual(by_email["id"], by_username["id"])
         self.assertEqual(by_email["username"], "member")
+
+    def test_account_recovery_resets_password_and_revokes_existing_sessions(self) -> None:
+        os.environ["DRAFTREFINE_INVITE_CODE"] = "invite-123"
+        os.environ["DRAFTREFINE_ACCOUNT_RECOVERY_CODE"] = "recover-this-owner-account"
+        user, old_session = self.service.register_user(
+            email="owner@example.com",
+            username="owner",
+            password="password-123",
+            invite_code="invite-123",
+        )
+
+        recovered_user, new_session = self.service.recover_user_password(
+            identifier="owner@example.com",
+            new_password="new-password-456",
+            recovery_code="recover-this-owner-account",
+        )
+
+        self.assertEqual(recovered_user["id"], user["id"])
+        self.assertIsNone(self.service.get_user_by_session(old_session))
+        self.assertEqual(self.service.get_user_by_session(new_session)["id"], user["id"])
+        with self.assertRaisesRegex(ValueError, "账号或密码不正确"):
+            self.service.login_user(identifier="owner", password="password-123")
+        logged_in, _ = self.service.login_user(identifier="owner", password="new-password-456")
+        self.assertEqual(logged_in["id"], user["id"])
 
     def test_project_access_blocks_other_users(self) -> None:
         os.environ["DRAFTREFINE_INVITE_CODE"] = "invite-123"

@@ -4,7 +4,7 @@ import { AlertCircle, KeyRound, LockKeyhole, Mail, UserRound } from 'lucide-reac
 import { useAuth } from '../auth/AuthContext';
 import './AuthPage.css';
 
-type AuthTab = 'login' | 'register';
+type AuthTab = 'login' | 'register' | 'recover';
 
 function titleForState(hasUsers: boolean) {
   return hasUsers ? '登录 DraftRefine' : '创建首个账号';
@@ -15,7 +15,7 @@ export const AuthPage: React.FC = () => {
   const location = useLocation() as ReturnType<typeof useLocation> & {
     state?: { from?: string };
   };
-  const { authStatus, login, register } = useAuth();
+  const { authStatus, login, register, recover } = useAuth();
 
   const [activeTab, setActiveTab] = useState<AuthTab>(authStatus?.hasUsers ? 'login' : 'register');
   const [error, setError] = useState<string | null>(null);
@@ -27,11 +27,15 @@ export const AuthPage: React.FC = () => {
     password: '',
     inviteCode: '',
   });
+  const [recoveryForm, setRecoveryForm] = useState({ identifier: '', newPassword: '', recoveryCode: '' });
 
   const redirectTarget = location.state?.from || '/';
   const showInviteCode = authStatus?.registrationMode === 'invite-only';
-  const pageTitle = titleForState(Boolean(authStatus?.hasUsers));
-  const pageDescription = authStatus?.hasUsers
+  const isRecovering = activeTab === 'recover';
+  const pageTitle = isRecovering ? '重置 DraftRefine 密码' : titleForState(Boolean(authStatus?.hasUsers));
+  const pageDescription = isRecovering
+    ? '输入账号、新密码和站点所有者提供的恢复码。'
+    : authStatus?.hasUsers
     ? '输入邮箱或用户名与密码后进入你的项目。'
     : '当前站点需要先创建首个账号，现有项目会自动归到这个账号名下。';
 
@@ -80,6 +84,32 @@ export const AuthPage: React.FC = () => {
     }
   };
 
+  const handleRecovery = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (recoveryForm.identifier.trim().length < 3) {
+      setError('请输入邮箱或用户名。');
+      return;
+    }
+    if (recoveryForm.newPassword.trim().length < 8) {
+      setError('新密码至少需要 8 位。');
+      return;
+    }
+    if (recoveryForm.recoveryCode.trim().length < 12) {
+      setError('请输入站点所有者提供的恢复码。');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await recover(recoveryForm);
+      navigate(redirectTarget, { replace: true });
+    } catch (err: any) {
+      setError(err.message || '密码重置失败。');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="auth-shell">
       <div className="auth-card">
@@ -113,7 +143,66 @@ export const AuthPage: React.FC = () => {
           </div>
         ) : null}
 
-        {activeTab === 'login' ? (
+        {activeTab === 'recover' ? (
+          <form className="auth-form" onSubmit={handleRecovery}>
+            <label className="auth-field">
+              <span>邮箱或用户名</span>
+              <div className="auth-input">
+                <UserRound size={18} />
+                <input
+                  value={recoveryForm.identifier}
+                  onChange={(event) =>
+                    setRecoveryForm((current) => ({ ...current, identifier: event.target.value }))
+                  }
+                  placeholder="输入邮箱或用户名"
+                  autoComplete="username"
+                  minLength={3}
+                  required
+                />
+              </div>
+            </label>
+
+            <label className="auth-field">
+              <span>新密码</span>
+              <div className="auth-input">
+                <LockKeyhole size={18} />
+                <input
+                  type="password"
+                  value={recoveryForm.newPassword}
+                  onChange={(event) =>
+                    setRecoveryForm((current) => ({ ...current, newPassword: event.target.value }))
+                  }
+                  placeholder="至少 8 位"
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+              </div>
+            </label>
+
+            <label className="auth-field">
+              <span>恢复码</span>
+              <div className="auth-input">
+                <KeyRound size={18} />
+                <input
+                  type="password"
+                  value={recoveryForm.recoveryCode}
+                  onChange={(event) =>
+                    setRecoveryForm((current) => ({ ...current, recoveryCode: event.target.value }))
+                  }
+                  placeholder="输入站点恢复码"
+                  autoComplete="one-time-code"
+                  minLength={12}
+                  required
+                />
+              </div>
+            </label>
+
+            <button className="auth-submit" type="submit" disabled={busy}>
+              {busy ? '重置中…' : '重置并登录'}
+            </button>
+          </form>
+        ) : activeTab === 'login' ? (
           <form className="auth-form" onSubmit={handleLogin}>
             <label className="auth-field">
               <span>邮箱或用户名</span>
@@ -152,6 +241,9 @@ export const AuthPage: React.FC = () => {
 
             <button className="auth-submit" type="submit" disabled={busy}>
               {busy ? '登录中…' : '登录'}
+            </button>
+            <button className="auth-recovery-link" type="button" onClick={() => { setError(null); setActiveTab('recover'); }}>
+              忘记密码？使用恢复码重置
             </button>
           </form>
         ) : (

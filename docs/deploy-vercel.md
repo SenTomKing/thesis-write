@@ -16,6 +16,10 @@
 - `QWEN_API_KEY` or `DRAFTREFINE_QWEN_API_KEY` (optional)
 - `SEMANTIC_SCHOLAR_API_KEY` (optional)
 - `BLOB_READ_WRITE_TOKEN`
+- `DRAFTREFINE_INVITE_CODE`
+  - Required when creating accounts through the registration page
+- `DRAFTREFINE_ACCOUNT_RECOVERY_CODE`
+  - A long private recovery code for the site owner to reset a forgotten password; never commit this value
 - `DRAFTREFINE_ALLOWED_ORIGINS`
   - Needed only if frontend and backend are split across origins
 

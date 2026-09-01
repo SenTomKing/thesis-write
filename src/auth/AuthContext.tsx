@@ -15,6 +15,12 @@ type RegisterPayload = {
   inviteCode: string;
 };
 
+type RecoveryPayload = {
+  identifier: string;
+  newPassword: string;
+  recoveryCode: string;
+};
+
 type AuthContextValue = {
   user: UserProfile | null;
   authStatus: AuthStatus | null;
@@ -22,6 +28,7 @@ type AuthContextValue = {
   refresh: () => Promise<void>;
   login: (payload: LoginPayload) => Promise<UserProfile>;
   register: (payload: RegisterPayload) => Promise<UserProfile>;
+  recover: (payload: RecoveryPayload) => Promise<UserProfile>;
   logout: () => Promise<void>;
 };
 
@@ -102,6 +109,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 inviteConfigured: true,
               }
         );
+        clearWorkspaceState();
+        return response.user;
+      },
+      recover: async (payload) => {
+        const response = await api.auth.recover(payload);
+        setUser(response.user);
         clearWorkspaceState();
         return response.user;
       },

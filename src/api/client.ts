@@ -237,6 +237,8 @@ export const api = {
       request<{ user: UserProfile }>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
     login: (data: { identifier: string; password: string }) =>
       request<{ user: UserProfile }>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+    recover: (data: { identifier: string; newPassword: string; recoveryCode: string }) =>
+      request<{ user: UserProfile }>('/auth/recover', { method: 'POST', body: JSON.stringify(data) }),
     logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
   },
   

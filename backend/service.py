@@ -1725,6 +1725,9 @@ class BackendService:
     def _configured_invite_code(self) -> str:
         return (os.getenv("DRAFTREFINE_INVITE_CODE") or os.getenv("INVITE_CODE") or "").strip()
 
+    def _configured_account_recovery_code(self) -> str:
+        return (os.getenv("DRAFTREFINE_ACCOUNT_RECOVERY_CODE") or "").strip()
+
     def _session_days(self) -> int:
         return max(1, int((os.getenv("DRAFTREFINE_SESSION_DAYS") or "30").strip() or "30"))
 
@@ -1803,6 +1806,39 @@ class BackendService:
             token = self._create_session(connection, user["id"])
             connection.commit()
         return self._serialize_user(user), token
+
+    def recover_user_password(
+        self,
+        *,
+        identifier: str,
+        new_password: str,
+        recovery_code: str,
+    ) -> tuple[dict[str, Any], str]:
+        if len(new_password) < 8:
+            raise ValueError("密码至少需要 8 位。")
+        configured_code = self._configured_account_recovery_code()
+        if not configured_code:
+            raise ValueError("站点尚未配置账号恢复码，请联系站点所有者。")
+        if not secrets.compare_digest(recovery_code.strip(), configured_code):
+            raise ValueError("恢复信息不正确。")
+
+        normalized_identifier = normalize_email(identifier)
+        with self._connect() as connection:
+            user = connection.execute(
+                "SELECT * FROM users WHERE email = ? OR username = ?",
+                (normalized_identifier, normalize_username(identifier)),
+            ).fetchone()
+            if user is None:
+                raise ValueError("恢复信息不正确。")
+            connection.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (make_password_hash(new_password), user["id"]),
+            )
+            connection.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
+            token = self._create_session(connection, user["id"])
+            refreshed_user = connection.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
+            connection.commit()
+        return self._serialize_user(refreshed_user), token
 
     def _cleanup_expired_sessions(self, connection: sqlite3.Connection) -> None:
         connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (utc_now(),))

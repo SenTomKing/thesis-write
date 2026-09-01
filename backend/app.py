@@ -29,6 +29,12 @@ class AuthLoginRequest(BaseModel):
     password: str = Field(min_length=8)
 
 
+class AuthRecoveryRequest(BaseModel):
+    identifier: str = Field(min_length=3)
+    newPassword: str = Field(min_length=8)
+    recoveryCode: str = Field(min_length=12)
+
+
 class ProjectCreateRequest(BaseModel):
     title: str = Field(min_length=1)
     type: str
@@ -305,6 +311,21 @@ def register_auth(payload: AuthRegisterRequest, request: Request) -> JSONRespons
 def login_auth(payload: AuthLoginRequest, request: Request) -> JSONResponse:
     try:
         user, token = service.login_user(identifier=payload.identifier, password=payload.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    response = JSONResponse({"user": user})
+    set_session_cookie(response, token, request)
+    return response
+
+
+@app.post("/api/auth/recover")
+def recover_auth(payload: AuthRecoveryRequest, request: Request) -> JSONResponse:
+    try:
+        user, token = service.recover_user_password(
+            identifier=payload.identifier,
+            new_password=payload.newPassword,
+            recovery_code=payload.recoveryCode,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     response = JSONResponse({"user": user})
