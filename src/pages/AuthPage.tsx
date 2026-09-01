@@ -46,6 +46,14 @@ export const AuthPage: React.FC = () => {
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (loginForm.identifier.trim().length < 3) {
+      setError('请输入至少 3 个字符的邮箱或用户名。');
+      return;
+    }
+    if (loginForm.password.trim().length < 8) {
+      setError('请输入至少 8 位密码。');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -118,6 +126,8 @@ export const AuthPage: React.FC = () => {
                   }
                   placeholder="输入邮箱或用户名"
                   autoComplete="username"
+                  minLength={3}
+                  required
                 />
               </div>
             </label>
@@ -134,6 +144,8 @@ export const AuthPage: React.FC = () => {
                   }
                   placeholder="输入密码"
                   autoComplete="current-password"
+                  minLength={8}
+                  required
                 />
               </div>
             </label>
@@ -156,6 +168,7 @@ export const AuthPage: React.FC = () => {
                   }
                   placeholder="name@example.com"
                   autoComplete="email"
+                  required
                 />
               </div>
             </label>
@@ -171,6 +184,8 @@ export const AuthPage: React.FC = () => {
                   }
                   placeholder="设置一个用户名"
                   autoComplete="username"
+                  minLength={3}
+                  required
                 />
               </div>
             </label>
@@ -187,6 +202,8 @@ export const AuthPage: React.FC = () => {
                   }
                   placeholder="至少 8 位"
                   autoComplete="new-password"
+                  minLength={8}
+                  required
                 />
               </div>
             </label>
@@ -202,6 +219,7 @@ export const AuthPage: React.FC = () => {
                       setRegisterForm((current) => ({ ...current, inviteCode: event.target.value }))
                     }
                     placeholder="输入邀请码"
+                    required
                   />
                 </div>
               </label>

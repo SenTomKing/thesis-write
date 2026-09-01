@@ -53,7 +53,46 @@ async function fetchWithRetry(url: string, options: RequestInit, attempts = 2): 
   throw lastError;
 }
 
-function humanizeDetail(detail: string): string {
+function validationFieldLabel(location: unknown): string {
+  if (!Array.isArray(location)) return '';
+  const field = [...location].reverse().find((item) => typeof item === 'string' && item !== 'body');
+  const labels: Record<string, string> = {
+    identifier: '邮箱或用户名',
+    password: '密码',
+    email: '邮箱',
+    username: '用户名',
+    inviteCode: '邀请码',
+  };
+  return typeof field === 'string' ? labels[field] || field : '';
+}
+
+function formatValidationDetail(detail: unknown[]): string {
+  const messages = detail
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    .map((item) => {
+      const field = validationFieldLabel(item.loc);
+      const message = typeof item.msg === 'string' ? item.msg : '';
+      const type = typeof item.type === 'string' ? item.type : '';
+      const context = item.ctx && typeof item.ctx === 'object' ? (item.ctx as Record<string, unknown>) : {};
+
+      if (type.includes('missing')) return field ? `请填写${field}。` : '请填写必填内容。';
+      if (type.includes('string_too_short')) {
+        const minLength = typeof context.min_length === 'number' ? context.min_length : null;
+        return field && minLength ? `${field}至少需要 ${minLength} 个字符。` : message;
+      }
+      return field && message ? `${field}：${message}` : message;
+    })
+    .filter(Boolean);
+
+  return messages.join(' ') || '提交的信息不符合要求，请检查后重试。';
+}
+
+export function humanizeDetail(detail: unknown): string {
+  if (Array.isArray(detail)) return formatValidationDetail(detail);
+  if (detail && typeof detail === 'object') {
+    const value = detail as Record<string, unknown>;
+    return humanizeDetail(value.detail || value.message || '请求失败，请稍后重试。');
+  }
   const text = String(detail || '').trim();
   if (!text) return '请求失败，请稍后重试。';
   if (/Failed to fetch/i.test(text)) {
