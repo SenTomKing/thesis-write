@@ -595,10 +595,6 @@ export const Editor: React.FC = () => {
     );
   }, [activeSectionId, bundle]);
 
-  const candidateWarnings = useMemo(
-    () => (workspaceCandidate?.warnings || []).map((item) => userFacingMessage(item)).filter(Boolean),
-    [workspaceCandidate?.warnings]
-  );
   const evidenceSummary = useMemo(() => buildEvidenceSummary(workspaceCandidate), [workspaceCandidate]);
   const rankedEvidence = useMemo(
     () => [...(workspaceCandidate?.evidence || [])].sort((left, right) => right.score - left.score),
@@ -975,20 +971,6 @@ export const Editor: React.FC = () => {
                   readOnly
                   placeholder="选择一个动作后，这里会返回候选改写结果。"
                 />
-
-                {candidateWarnings.length ? (
-                  <Card className="editor-warning-card">
-                    <div className="editor-warning-card__title">
-                      <AlertCircle size={16} />
-                      需要确认
-                    </div>
-                    <ul className="editor-warning-list">
-                      {candidateWarnings.map((warning, index) => (
-                        <li key={`${warning}-${index}`}>{warning}</li>
-                      ))}
-                    </ul>
-                  </Card>
-                ) : null}
 
                 <div className="workspace-result-actions">
                   <Button variant="outline" onClick={handleRejectCandidate} disabled={!workspaceCandidate}>
