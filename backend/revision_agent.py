@@ -166,6 +166,7 @@ class RevisionState:
     note: str
     comment_context: str
     previous_candidate_text: str
+    permissive_mode: bool = False
     effective_action_type: str = ""
     instruction_plan: dict[str, Any] = field(default_factory=dict)
     rewrite_mode: str = ""
@@ -206,7 +207,21 @@ class RevisionGraph:
         self.heuristic_rewrite = heuristic_rewrite
 
     def run(self) -> dict[str, Any]:
-        self._interpret()
+        try:
+            self._interpret()
+        except RuntimeError as exc:
+            if not self.state.permissive_mode:
+                raise
+            self.state.effective_action_type = self.state.action_type
+            self.state.execution_lane = "fast"
+            self.state.risk_level = "low"
+            self.state.needs_retrieval = False
+            self.state.must_preserve = []
+            self._analyze()
+            self.state.evidence = []
+            self._plan()
+            self._use_local_fallback(str(exc))
+            return self._serialize()
         self._analyze()
         if self.state.execution_lane == "full":
             self._retrieve()
@@ -529,7 +544,7 @@ class RevisionGraph:
         return labels.get(self._effective_action_type(), "Revise text")
 
     def _write_and_review_with_repair(self) -> None:
-        max_attempts = 3 if self.state.execution_lane == "full" else 2
+        max_attempts = 1 if self.state.permissive_mode else (3 if self.state.execution_lane == "full" else 2)
         repair_instruction = ""
         final_error = ""
 
@@ -543,6 +558,9 @@ class RevisionGraph:
                 self._review_candidate()
                 return
             except RuntimeError as exc:
+                if self.state.permissive_mode:
+                    self._use_local_fallback(str(exc))
+                    return
                 if exc.__class__.__name__ == "ModelInvocationError":
                     raise
                 final_error = str(exc)
@@ -552,6 +570,48 @@ class RevisionGraph:
                     break
 
         raise RuntimeError(self._final_user_error(final_error))
+
+    def _use_local_fallback(self, error: str) -> None:
+        """Keep the public demo responsive when its external model is unavailable."""
+        fallback = self.heuristic_rewrite(
+            self._effective_action_type(),
+            self.state.target_text,
+            self.state.comment_context,
+            self.state.language,
+        )
+        fallback_text = normalize_text_block(str(fallback.get("text") or "")) or self.state.target_text
+        self.state.candidate_target_text = fallback_text
+        self.state.summary = str(fallback.get("summary") or self._goal_label())
+        self.state.warnings = list(
+            dict.fromkeys(
+                [
+                    *self.state.warnings,
+                    *[str(item) for item in fallback.get("warnings", []) if str(item).strip()],
+                    "公开演示版已返回本地候选稿；请在正式写作前人工复核。",
+                ]
+            )
+        )
+        self.state.review = {
+            "passed": True,
+            "issues": [],
+            "warnings": list(self.state.warnings),
+            "repairInstruction": "",
+            "fallback": True,
+        }
+        self.state.step_runs.append(
+            StepRun(
+                step="writer",
+                action_name=self._effective_action_type(),
+                prompt_version="rewrite/local-demo-fallback@1.0.0",
+                provider="deterministic",
+                model="demo-fallback",
+                status="completed",
+                latency_ms=0,
+                error=error,
+                input_text=self.state.target_text,
+                output_text=fallback_text,
+            )
+        )
 
     def _retry_note(self, attempt: int, max_attempts: int, error: str) -> str:
         lowered = error.lower()
@@ -696,7 +756,7 @@ class RevisionGraph:
         }
 
         unsafe_reason = self._unsafe_writer_reason(original_chunk, payload["text"])
-        if unsafe_reason:
+        if unsafe_reason and not self.state.permissive_mode:
             self.state.step_runs.append(
                 StepRun(
                     step="writer",
@@ -713,7 +773,7 @@ class RevisionGraph:
             )
             raise RuntimeError(unsafe_reason)
 
-        if normalize_text_block(original_chunk) == normalize_text_block(payload["text"]):
+        if not self.state.permissive_mode and normalize_text_block(original_chunk) == normalize_text_block(payload["text"]):
             self.state.step_runs.append(
                 StepRun(
                     step="writer",
@@ -773,6 +833,30 @@ class RevisionGraph:
         return ""
 
     def _review_candidate(self) -> None:
+        if self.state.permissive_mode:
+            self.state.review = {
+                "passed": True,
+                "issues": [],
+                "warnings": ["公开演示版已跳过候选稿范围审查。"],
+                "repairInstruction": "",
+                "bypassed": True,
+            }
+            self.state.warnings = list(dict.fromkeys([*self.state.warnings, *self.state.review["warnings"]]))
+            self.state.step_runs.append(
+                StepRun(
+                    step="review",
+                    action_name="revision-review",
+                    prompt_version="review/public-demo-bypass@1.0.0",
+                    provider="deterministic",
+                    model="public-demo-bypass",
+                    status="completed",
+                    latency_ms=0,
+                    error=None,
+                    input_text=self.state.target_text,
+                    output_text=json_safe_dump(self.state.review),
+                )
+            )
+            return
         started = perf_counter()
         review = self._heuristic_review()
         latency_ms = int((perf_counter() - started) * 1000)

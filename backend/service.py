@@ -83,6 +83,10 @@ def load_env_file(env_path: Path = PROJECT_ROOT / ".env") -> None:
 load_env_file()
 
 
+def public_demo_mode_enabled() -> bool:
+    return os.getenv("DRAFTREFINE_DEMO_MODE", "").strip().lower() in {"1", "true", "yes"}
+
+
 class ModelInvocationError(RuntimeError):
     def __init__(self, message: str, *, attempts: list[dict[str, Any]] | None = None) -> None:
         super().__init__(message)
@@ -4021,6 +4025,7 @@ class BackendService:
                 note=note,
                 comment_context=comment_context,
                 previous_candidate_text=previous_candidate_text,
+                permissive_mode=public_demo_mode_enabled(),
             ),
             retrieve=lambda query_text, _: self._collect_revision_evidence(
                 connection,

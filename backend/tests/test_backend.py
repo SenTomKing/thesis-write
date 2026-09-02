@@ -21,6 +21,7 @@ class BackendServiceTests(unittest.TestCase):
         os.environ.pop("INVITE_CODE", None)
         os.environ.pop("DRAFTREFINE_ACCOUNT_RECOVERY_CODE", None)
         os.environ.pop("DRAFTREFINE_SESSION_DAYS", None)
+        os.environ.pop("DRAFTREFINE_DEMO_MODE", None)
         os.environ["DRAFTREFINE_SKIP_DEMO_SEED"] = "1"
         os.environ["DRAFTREFINE_DEEPSEEK_API_KEY"] = ""
         os.environ["DRAFTREFINE_QWEN_API_KEY"] = ""
@@ -39,6 +40,7 @@ class BackendServiceTests(unittest.TestCase):
         os.environ.pop("DRAFTREFINE_INVITE_CODE", None)
         os.environ.pop("INVITE_CODE", None)
         os.environ.pop("DRAFTREFINE_SESSION_DAYS", None)
+        os.environ.pop("DRAFTREFINE_DEMO_MODE", None)
         os.environ.pop("DRAFTREFINE_SKIP_DEMO_SEED", None)
         if self.database_path.exists():
             self.database_path.unlink()
@@ -761,6 +763,73 @@ class BackendServiceTests(unittest.TestCase):
         en_call = next(call for call in self.provider_calls if str(call["prompt_version"]).startswith("rewrite/translate-zh-en"))
         self.assertEqual(zh_call["input_payload"]["language"], "en")
         self.assertEqual(en_call["input_payload"]["language"], "zh")
+
+    def test_public_demo_mode_accepts_a_long_translation_candidate(self) -> None:
+        os.environ["DRAFTREFINE_DEMO_MODE"] = "1"
+        source = "本研究从多个维度考察了该方法在复杂应用场景中的适用性。"
+        long_translation = "This study examines the applicability of the method across multiple dimensions in complex applied settings. " * 8
+        self.provider_patcher.stop()
+        try:
+            with patch.object(
+                BackendService,
+                "_call_provider_json",
+                autospec=True,
+                return_value=(
+                    {
+                        "candidate_text": long_translation,
+                        "summary": "Translation completed",
+                        "warnings": [],
+                    },
+                    self._run_meta(),
+                ),
+            ):
+                result = self.service.revise_text(text=source, action_type="translate-zh-en")
+        finally:
+            self.provider_patcher.start()
+
+        self.assertEqual(result["text"], long_translation.strip())
+        self.assertTrue(result["review"].get("bypassed"))
+
+    def test_public_demo_mode_returns_local_candidate_when_model_fails(self) -> None:
+        os.environ["DRAFTREFINE_DEMO_MODE"] = "1"
+        source = "这段文字用于验证公开演示版在模型暂不可用时仍会返回候选稿。"
+        self.provider_patcher.stop()
+        try:
+            with patch.object(
+                BackendService,
+                "_call_provider_json",
+                autospec=True,
+                side_effect=ModelInvocationError("provider unavailable"),
+            ):
+                result = self.service.revise_text(text=source, action_type="translate-zh-en")
+        finally:
+            self.provider_patcher.start()
+
+        self.assertTrue(result["text"].strip())
+        self.assertTrue(result["review"].get("fallback"))
+        self.assertTrue(any("公开演示版已返回本地候选稿" in warning for warning in result["warnings"]))
+
+    def test_public_demo_mode_returns_a_candidate_for_custom_requests_when_planning_fails(self) -> None:
+        os.environ["DRAFTREFINE_DEMO_MODE"] = "1"
+        source = "这段文字用于验证自定义改写在公开演示版中的降级路径。"
+        self.provider_patcher.stop()
+        try:
+            with patch.object(
+                BackendService,
+                "_call_provider_json",
+                autospec=True,
+                side_effect=ModelInvocationError("provider unavailable"),
+            ):
+                result = self.service.revise_text(
+                    text=source,
+                    action_type="custom-instruction",
+                    note="请提升这段文字的学术表达。",
+                )
+        finally:
+            self.provider_patcher.start()
+
+        self.assertTrue(result["text"].strip())
+        self.assertTrue(result["review"].get("fallback"))
 
     def test_reduce_aigc_action_uses_action_specific_prompt(self) -> None:
         result = self.service.revise_text(

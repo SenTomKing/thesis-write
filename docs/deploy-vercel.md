@@ -17,7 +17,7 @@
 - `SEMANTIC_SCHOLAR_API_KEY` (optional)
 - `BLOB_READ_WRITE_TOKEN`
 - `DRAFTREFINE_DEMO_MODE=1`
-  - Enable this for the public portfolio deployment. It hides account actions and creates an isolated shared demo workspace; do not enable it for a private multi-user deployment.
+  - Enable this for the public portfolio deployment. It hides account actions, creates an isolated shared demo workspace, and relaxes candidate-output guardrails so the demonstration flow remains responsive; do not enable it for a private multi-user deployment.
 - `DRAFTREFINE_INVITE_CODE`
   - Required when creating accounts through the registration page
 - `DRAFTREFINE_ACCOUNT_RECOVERY_CODE`
