@@ -34,7 +34,7 @@ const centeredCardStyle: React.CSSProperties = {
 function LoadingScreen() {
   return (
     <div style={centeredShellStyle}>
-      <div style={centeredCardStyle}>正在确认登录状态…</div>
+      <div style={centeredCardStyle}>正在加载工作台…</div>
     </div>
   );
 }

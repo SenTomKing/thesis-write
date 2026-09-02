@@ -1722,6 +1722,24 @@ class BackendService:
             "inviteConfigured": bool((os.getenv("DRAFTREFINE_INVITE_CODE") or os.getenv("INVITE_CODE") or "").strip()),
         }
 
+    def get_or_create_demo_user(self) -> dict[str, Any]:
+        demo_email = "demo@draftrefine.local"
+        with self._connect() as connection:
+            user = connection.execute("SELECT * FROM users WHERE email = ?", (demo_email,)).fetchone()
+            if user is None:
+                user_id = new_id("user")
+                connection.execute(
+                    """
+                    INSERT INTO users (id, email, username, password_hash, created_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (user_id, demo_email, "demo", make_password_hash(secrets.token_urlsafe(32)), utc_now()),
+                )
+                user = connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+                connection.commit()
+        self._seed_demo_data_if_needed(owner_user_id=user["id"])
+        return self._serialize_user(user)
+
     def _configured_invite_code(self) -> str:
         return (os.getenv("DRAFTREFINE_INVITE_CODE") or os.getenv("INVITE_CODE") or "").strip()
 
@@ -3133,9 +3151,12 @@ class BackendService:
             (status, progress_state, next_action, utc_now(), open_issue_count, unresolved_comment_count, pending_revision_count, project_id),
         )
 
-    def _seed_demo_data_if_needed(self) -> None:
+    def _seed_demo_data_if_needed(self, *, owner_user_id: str | None = None) -> None:
         with self._connect() as connection:
-            count = connection.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+            if owner_user_id:
+                count = connection.execute("SELECT COUNT(*) FROM projects WHERE owner_user_id = ?", (owner_user_id,)).fetchone()[0]
+            else:
+                count = connection.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
             if count > 0:
                 return
             for demo in DEMO_PROJECTS:
@@ -3143,10 +3164,10 @@ class BackendService:
                 connection.execute(
                     """
                     INSERT INTO projects (
-                      id, title, type, language, source_type, status, progress_state,
-                      next_action, overview, created_at, updated_at, file_id, last_job_id,
-                      issue_count, unresolved_comment_count, pending_revision_count
-                    ) VALUES (?, ?, ?, ?, ?, 'diagnosed', 'active-revision', ?, ?, ?, ?, NULL, NULL, 0, 0, 0)
+                       id, title, type, language, source_type, status, progress_state,
+                       next_action, overview, created_at, updated_at, file_id, last_job_id,
+                       issue_count, unresolved_comment_count, pending_revision_count, owner_user_id
+                    ) VALUES (?, ?, ?, ?, ?, 'diagnosed', 'active-revision', ?, ?, ?, ?, NULL, NULL, 0, 0, 0, ?)
                     """,
                     (
                         project_id,
@@ -3158,6 +3179,7 @@ class BackendService:
                         demo.overview,
                         demo.created_at,
                         demo.updated_at,
+                        owner_user_id,
                     ),
                 )
                 section_ids: dict[str, str] = {}

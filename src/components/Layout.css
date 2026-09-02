@@ -121,6 +121,27 @@
   border: 1px solid rgba(124, 58, 237, 0.1);
 }
 
+.demo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid rgba(124, 58, 237, 0.1);
+  border-radius: 18px;
+  background: rgba(124, 58, 237, 0.06);
+}
+
+.demo-panel strong {
+  color: var(--text-primary);
+  font-size: 0.93rem;
+}
+
+.demo-panel span {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
 .account-avatar {
   width: 44px;
   height: 44px;

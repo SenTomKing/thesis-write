@@ -16,6 +16,8 @@
 - `QWEN_API_KEY` or `DRAFTREFINE_QWEN_API_KEY` (optional)
 - `SEMANTIC_SCHOLAR_API_KEY` (optional)
 - `BLOB_READ_WRITE_TOKEN`
+- `DRAFTREFINE_DEMO_MODE=1`
+  - Enable this for the public portfolio deployment. It hides account actions and creates an isolated shared demo workspace; do not enable it for a private multi-user deployment.
 - `DRAFTREFINE_INVITE_CODE`
   - Required when creating accounts through the registration page
 - `DRAFTREFINE_ACCOUNT_RECOVERY_CODE`

@@ -206,7 +206,18 @@ def clear_session_cookie(response: Response, request: Request) -> None:
     )
 
 
+def demo_mode_enabled() -> bool:
+    return (os.getenv("DRAFTREFINE_DEMO_MODE") or "").strip().lower() in {"1", "true", "yes"}
+
+
+def require_auth_mode() -> None:
+    if demo_mode_enabled():
+        raise HTTPException(status_code=404, detail="公开演示模式不提供账号操作。")
+
+
 def current_user(request: Request) -> dict[str, Any] | None:
+    if demo_mode_enabled():
+        return service.get_or_create_demo_user()
     return service.get_user_by_session(request.cookies.get(SESSION_COOKIE_NAME))
 
 
@@ -288,11 +299,12 @@ def health_check() -> dict[str, str]:
 
 @app.get("/api/auth/status")
 def auth_status() -> dict[str, Any]:
-    return service.auth_status()
+    return {**service.auth_status(), "demoMode": demo_mode_enabled()}
 
 
 @app.post("/api/auth/register")
 def register_auth(payload: AuthRegisterRequest, request: Request) -> JSONResponse:
+    require_auth_mode()
     try:
         user, token = service.register_user(
             email=payload.email,
@@ -309,6 +321,7 @@ def register_auth(payload: AuthRegisterRequest, request: Request) -> JSONRespons
 
 @app.post("/api/auth/login")
 def login_auth(payload: AuthLoginRequest, request: Request) -> JSONResponse:
+    require_auth_mode()
     try:
         user, token = service.login_user(identifier=payload.identifier, password=payload.password)
     except ValueError as exc:
@@ -320,6 +333,7 @@ def login_auth(payload: AuthLoginRequest, request: Request) -> JSONResponse:
 
 @app.post("/api/auth/recover")
 def recover_auth(payload: AuthRecoveryRequest, request: Request) -> JSONResponse:
+    require_auth_mode()
     try:
         user, token = service.recover_user_password(
             identifier=payload.identifier,
@@ -335,6 +349,7 @@ def recover_auth(payload: AuthRecoveryRequest, request: Request) -> JSONResponse
 
 @app.post("/api/auth/logout")
 def logout_auth(request: Request) -> JSONResponse:
+    require_auth_mode()
     service.delete_session(request.cookies.get(SESSION_COOKIE_NAME))
     response = JSONResponse({"ok": True})
     clear_session_cookie(response, request)

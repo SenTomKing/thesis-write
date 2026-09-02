@@ -144,6 +144,7 @@ export type AuthStatus = {
   hasUsers: boolean;
   registrationMode: 'invite-only' | string;
   inviteConfigured: boolean;
+  demoMode?: boolean;
 };
 
 export type RevisionCandidate = {

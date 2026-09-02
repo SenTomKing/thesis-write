@@ -302,6 +302,15 @@ class BackendServiceTests(unittest.TestCase):
         logged_in, _ = self.service.login_user(identifier="owner", password="new-password-456")
         self.assertEqual(logged_in["id"], user["id"])
 
+    def test_demo_user_has_a_dedicated_seeded_workspace(self) -> None:
+        demo_user = self.service.get_or_create_demo_user()
+
+        projects = self.service.list_projects(owner_user_id=demo_user["id"])
+
+        self.assertEqual(demo_user["username"], "demo")
+        self.assertGreaterEqual(len(projects), 1)
+        self.assertTrue(all(project["title"] for project in projects))
+
     def test_project_access_blocks_other_users(self) -> None:
         os.environ["DRAFTREFINE_INVITE_CODE"] = "invite-123"
         owner, _ = self.service.register_user(
